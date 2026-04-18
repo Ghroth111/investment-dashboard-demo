@@ -1,0 +1,8 @@
+Starting project at D:\Documents\New project\investment-dashboard-demo
+Starting Metro Bundler
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Web .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.8% (838/839)
+Web Bundled 3151ms index.ts (839 modules)
+ LOG  [web] Logs will appear in the browser console
+^C
