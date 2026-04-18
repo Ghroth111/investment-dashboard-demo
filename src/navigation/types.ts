@@ -8,6 +8,7 @@ export type RootStackParamList = {
   MainTabs: undefined;
   AccountDetail: { accountId: string };
   AddAccount: undefined;
+  AddTransaction: undefined;
   ApiConnect: undefined;
   ScreenshotImport: undefined;
   ManualEntry: undefined;
@@ -16,7 +17,7 @@ export type RootStackParamList = {
 export type TabParamList = {
   Dashboard: undefined;
   Accounts: undefined;
-  Records: undefined;
+  Transactions: undefined;
   Settings: undefined;
 };
 

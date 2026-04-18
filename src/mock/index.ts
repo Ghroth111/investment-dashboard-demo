@@ -1,5 +1,5 @@
 export { mockUser } from './user';
 export { mockAccounts } from './accounts';
-export { mockRecords } from './records';
+export { mockTransactions } from './transactions';
 export { mockPortfolioHistory } from './dashboard';
 export { exchangeRates, baseCurrencyOptions, upcomingFeatures } from './settings';

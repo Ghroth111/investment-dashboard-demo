@@ -2,8 +2,54 @@ export type CurrencyCode = 'USD' | 'CNY' | 'EUR' | 'HKD' | 'USDT';
 export type AccountType = 'Brokerage' | 'Fund' | 'Crypto' | 'Cash' | 'Manual';
 export type SourceType = 'api' | 'manual' | 'screenshot' | 'mock';
 export type AssetClass = 'Stock' | 'ETF' | 'Fund' | 'Crypto' | 'Cash';
-export type TrendRange = '1D' | '7D' | '30D' | 'ALL';
+export type TrendRange = '1D' | '7D' | '30D' | '90D' | '1Y' | 'YTD' | 'ALL';
 export type DemoPhase = 'splash' | 'login' | 'app';
+export type TransactionType = 'income' | 'expense' | 'transfer';
+export type TransactionFilter = 'all' | 'income' | 'expense' | 'investment';
+export type BaseExpenseCategory =
+  | 'Housing'
+  | 'Rent'
+  | 'Mortgage'
+  | 'Groceries'
+  | 'Dining'
+  | 'Coffee'
+  | 'Transportation'
+  | 'Fuel'
+  | 'Parking'
+  | 'Shopping'
+  | 'Healthcare'
+  | 'Fitness'
+  | 'Education'
+  | 'Entertainment'
+  | 'Travel'
+  | 'Utilities'
+  | 'Insurance'
+  | 'Subscriptions'
+  | 'Family'
+  | 'Gifts'
+  | 'Taxes'
+  | 'Other';
+export type BaseIncomeCategory =
+  | 'Salary'
+  | 'Bonus'
+  | 'Freelance'
+  | 'Business'
+  | 'Stocks'
+  | 'Crypto'
+  | 'Interest'
+  | 'Dividends'
+  | 'Funds'
+  | 'Refund'
+  | 'Rental'
+  | 'Gift'
+  | 'Other';
+export type BaseTransferCategory = 'Transfer';
+export type TransactionCategory =
+  | BaseExpenseCategory
+  | BaseIncomeCategory
+  | BaseTransferCategory
+  | 'Custom'
+  | string;
 
 export interface UserProfile {
   id: string;
@@ -38,16 +84,19 @@ export interface Account {
   holdings: Holding[];
 }
 
-export interface CashflowRecord {
+export interface Transaction {
   id: string;
   title: string;
-  kind: 'Deposit' | 'Withdrawal' | 'Dividend' | 'Fee' | 'Transfer';
+  type: TransactionType;
+  category: TransactionCategory;
+  subCategory: string;
   amount: number;
   currency: CurrencyCode;
-  accountId: string;
-  accountName: string;
+  date: string;
   note: string;
-  createdAt: string;
+  account: string;
+  accountId?: string;
+  isAuto: boolean;
 }
 
 export interface TrendPoint {
@@ -91,4 +140,17 @@ export interface ManualAccountPayload {
   currency: CurrencyCode;
   cashBalance: number;
   holdings: ManualHoldingInput[];
+}
+
+export interface AddTransactionPayload {
+  title: string;
+  type: TransactionType;
+  category: TransactionCategory;
+  subCategory: string;
+  amount: number;
+  currency: CurrencyCode;
+  date: string;
+  note: string;
+  account: string;
+  accountId?: string;
 }

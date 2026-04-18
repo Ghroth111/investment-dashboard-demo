@@ -4,16 +4,17 @@ import {
   exchangeRates,
   mockAccounts,
   mockPortfolioHistory,
-  mockRecords,
+  mockTransactions,
   mockUser,
 } from '../mock';
 import type {
   Account,
-  CashflowRecord,
+  AddTransactionPayload,
   DemoPhase,
   ExchangeRates,
   ManualAccountPayload,
   ManualHoldingInput,
+  Transaction,
   TrendPoint,
   TrendRange,
   UserProfile,
@@ -23,7 +24,7 @@ interface DemoState {
   phase: DemoPhase;
   user: UserProfile;
   accounts: Account[];
-  records: CashflowRecord[];
+  transactions: Transaction[];
   portfolioHistory: Record<TrendRange, TrendPoint[]>;
   exchangeRates: ExchangeRates;
   finishSplash: () => void;
@@ -31,6 +32,7 @@ interface DemoState {
   logout: () => void;
   setBaseCurrency: (currency: UserProfile['baseCurrency']) => void;
   addManualAccount: (payload: ManualAccountPayload) => string;
+  addTransaction: (payload: AddTransactionPayload) => string;
   deleteAccount: (accountId: string) => void;
 }
 
@@ -56,7 +58,7 @@ export const useDemoStore = create<DemoState>((set) => ({
   phase: 'splash',
   user: mockUser,
   accounts: mockAccounts,
-  records: mockRecords,
+  transactions: mockTransactions,
   portfolioHistory: mockPortfolioHistory,
   exchangeRates,
   finishSplash: () => set({ phase: 'login' }),
@@ -94,9 +96,25 @@ export const useDemoStore = create<DemoState>((set) => ({
 
     return accountId;
   },
+  addTransaction: (payload) => {
+    const transactionId = `txn-${Date.now()}`;
+
+    set((state) => ({
+      transactions: [
+        {
+          id: transactionId,
+          ...payload,
+          isAuto: false,
+        },
+        ...state.transactions,
+      ],
+    }));
+
+    return transactionId;
+  },
   deleteAccount: (accountId) =>
     set((state) => ({
       accounts: state.accounts.filter((account) => account.id !== accountId),
-      records: state.records.filter((record) => record.accountId !== accountId),
+      transactions: state.transactions.filter((transaction) => transaction.accountId !== accountId),
     })),
 }));
