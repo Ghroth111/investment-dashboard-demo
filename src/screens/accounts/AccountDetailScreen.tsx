@@ -68,14 +68,21 @@ export function AccountDetailScreen({
   );
 
   function handleDelete() {
-    Alert.alert('删除账户', '这会从当前前端 mock 状态中移除该账户以及关联记录。', [
+    Alert.alert('删除账户', '这会从当前账号下的 SQLite 账户数据中移除该账户。', [
       { text: '取消', style: 'cancel' },
       {
         text: '删除',
         style: 'destructive',
-        onPress: () => {
-          deleteAccount(currentAccount.id);
-          navigation.goBack();
+        onPress: async () => {
+          try {
+            await deleteAccount(currentAccount.id);
+            navigation.goBack();
+          } catch (error) {
+            Alert.alert(
+              '删除失败',
+              error instanceof Error ? error.message : '账户删除失败，请稍后重试。',
+            );
+          }
         },
       },
     ]);
@@ -167,7 +174,7 @@ export function AccountDetailScreen({
         {syncState === 'success' ? (
           <View style={[styles.syncBanner, styles.syncSuccess]}>
             <Ionicons name="checkmark-circle-outline" size={16} color={colors.positive} />
-            <Text style={styles.syncText}>已完成一次 mock 刷新，最近同步时间已更新样式验证。</Text>
+            <Text style={styles.syncText}>已完成一次刷新，最近同步时间已更新样式验证。</Text>
           </View>
         ) : null}
       </SurfaceCard>
@@ -187,10 +194,10 @@ export function AccountDetailScreen({
       <SurfaceCard>
         <Text style={styles.sectionTitle}>说明</Text>
         <Text style={styles.noteLine}>
-          数据来源：{currentAccount.sourceType === 'manual' ? '手动录入' : 'Mock API'}
+          数据来源：{currentAccount.sourceType === 'manual' ? '手动录入' : 'Demo 种子数据'}
         </Text>
         <Text style={styles.noteLine}>账户币种：{currentAccount.currency}</Text>
-        <Text style={styles.noteLine}>未来可扩展：同步状态、接口健康度、编辑账户资料。</Text>
+        <Text style={styles.noteLine}>未来可扩展：实时同步状态、接口健康度、编辑账户资料。</Text>
       </SurfaceCard>
     </AppScreen>
   );

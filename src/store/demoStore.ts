@@ -1,19 +1,17 @@
 import { create } from 'zustand';
 
-import {
-  exchangeRates,
-  mockAccounts,
-  mockPortfolioHistory,
-  mockTransactions,
-  mockUser,
-} from '../mock';
+import { demoAuth } from '../config/demo';
+import { createManualAccount, fetchAccounts, removeAccount } from '../services/accounts';
+import { fetchCurrentUser } from '../services/auth';
+import { fetchPortfolioHistory } from '../services/portfolioHistory';
+import { clearSession, readSession, saveSession } from '../services/sessionStorage';
+import { exchangeRates, mockTransactions } from '../mock';
 import type {
   Account,
   AddTransactionPayload,
   DemoPhase,
   ExchangeRates,
   ManualAccountPayload,
-  ManualHoldingInput,
   Transaction,
   TrendPoint,
   TrendRange,
@@ -23,47 +21,141 @@ import type {
 interface DemoState {
   phase: DemoPhase;
   user: UserProfile;
+  authToken: string | null;
   accounts: Account[];
   transactions: Transaction[];
   portfolioHistory: Record<TrendRange, TrendPoint[]>;
   exchangeRates: ExchangeRates;
   finishSplash: () => void;
-  enterDemo: () => void;
+  authenticate: (payload: { user: UserProfile; token: string }) => Promise<void>;
+  loadAccounts: () => Promise<void>;
+  loadPortfolioHistory: () => Promise<void>;
+  restoreSession: () => Promise<void>;
   logout: () => void;
   setBaseCurrency: (currency: UserProfile['baseCurrency']) => void;
-  addManualAccount: (payload: ManualAccountPayload) => string;
+  addManualAccount: (payload: ManualAccountPayload) => Promise<string>;
   addTransaction: (payload: AddTransactionPayload) => string;
-  deleteAccount: (accountId: string) => void;
+  deleteAccount: (accountId: string) => Promise<void>;
 }
 
-function createManualHolding(
-  holding: ManualHoldingInput,
-  index: number,
-  currency: Account['currency'],
-) {
+const defaultUser: UserProfile = {
+  id: 'guest-user',
+  name: '未登录用户',
+  email: '',
+  baseCurrency: 'USD',
+  memberSince: new Date().toISOString().slice(0, 10),
+};
+
+function createEmptyPortfolioHistory(): Record<TrendRange, TrendPoint[]> {
   return {
-    id: `manual-holding-${Date.now()}-${index}`,
-    name: holding.name,
-    symbol: holding.symbol,
-    assetClass: holding.assetClass,
-    quantity: holding.quantity,
-    currentPrice: holding.currentPrice,
-    costBasis: holding.costBasis,
-    currency,
-    dailyChangeRate: index % 2 === 0 ? 0.0032 : -0.0015,
+    '1D': [],
+    '7D': [],
+    '30D': [],
+    '90D': [],
+    '1Y': [],
+    YTD: [],
+    ALL: [],
   };
 }
 
-export const useDemoStore = create<DemoState>((set) => ({
+function isDemoUser(user: UserProfile) {
+  return user.email.toLowerCase() === demoAuth.email.toLowerCase();
+}
+
+function getSeededTransactions(user: UserProfile) {
+  return isDemoUser(user) ? mockTransactions : [];
+}
+
+export const useDemoStore = create<DemoState>((set, get) => ({
   phase: 'splash',
-  user: mockUser,
-  accounts: mockAccounts,
-  transactions: mockTransactions,
-  portfolioHistory: mockPortfolioHistory,
+  user: defaultUser,
+  authToken: null,
+  accounts: [],
+  transactions: [],
+  portfolioHistory: createEmptyPortfolioHistory(),
   exchangeRates,
   finishSplash: () => set({ phase: 'login' }),
-  enterDemo: () => set({ phase: 'app' }),
-  logout: () => set({ phase: 'login' }),
+  authenticate: async ({ user, token }) => {
+    saveSession({ user, token });
+
+    set({
+      phase: 'app',
+      user,
+      authToken: token,
+      accounts: [],
+      transactions: getSeededTransactions(user),
+      portfolioHistory: createEmptyPortfolioHistory(),
+    });
+
+    await Promise.all([get().loadAccounts(), get().loadPortfolioHistory()]);
+  },
+  loadAccounts: async () => {
+    const token = get().authToken;
+    if (!token) {
+      set({ accounts: [] });
+      return;
+    }
+
+    const accounts = await fetchAccounts(token);
+    set({ accounts });
+  },
+  loadPortfolioHistory: async () => {
+    const token = get().authToken;
+    if (!token) {
+      set({ portfolioHistory: createEmptyPortfolioHistory() });
+      return;
+    }
+
+    const portfolioHistory = await fetchPortfolioHistory(token);
+    set({ portfolioHistory });
+  },
+  restoreSession: async () => {
+    const session = readSession();
+    if (!session?.token) {
+      set({ phase: 'login' });
+      return;
+    }
+
+    try {
+      const user = await fetchCurrentUser(session.token);
+
+      saveSession({
+        token: session.token,
+        user,
+      });
+
+      set({
+        phase: 'app',
+        user,
+        authToken: session.token,
+        accounts: [],
+        transactions: getSeededTransactions(user),
+        portfolioHistory: createEmptyPortfolioHistory(),
+      });
+
+      await Promise.all([get().loadAccounts(), get().loadPortfolioHistory()]);
+    } catch {
+      clearSession();
+      set({
+        phase: 'login',
+        user: defaultUser,
+        authToken: null,
+        accounts: [],
+        transactions: [],
+        portfolioHistory: createEmptyPortfolioHistory(),
+      });
+    }
+  },
+  logout: () =>
+    (clearSession(),
+    set({
+      phase: 'login',
+      user: defaultUser,
+      authToken: null,
+      accounts: [],
+      transactions: [],
+      portfolioHistory: createEmptyPortfolioHistory(),
+    })),
   setBaseCurrency: (currency) =>
     set((state) => ({
       user: {
@@ -71,30 +163,21 @@ export const useDemoStore = create<DemoState>((set) => ({
         baseCurrency: currency,
       },
     })),
-  addManualAccount: (payload) => {
-    const accountId = `manual-account-${Date.now()}`;
+  addManualAccount: async (payload) => {
+    const token = get().authToken;
+    if (!token) {
+      throw new Error('You must be logged in to add an account.');
+    }
+
+    const createdAccount = await createManualAccount(token, payload);
 
     set((state) => ({
-      accounts: [
-        {
-          id: accountId,
-          name: payload.name,
-          platform: payload.platform,
-          type: payload.type,
-          sourceType: 'manual',
-          currency: payload.currency,
-          cashBalance: payload.cashBalance,
-          updatedAt: new Date().toISOString(),
-          subtitle: '通过手动录入创建',
-          holdings: payload.holdings.map((holding, index) =>
-            createManualHolding(holding, index, payload.currency),
-          ),
-        },
-        ...state.accounts,
-      ],
+      accounts: [createdAccount, ...state.accounts],
     }));
 
-    return accountId;
+    await get().loadPortfolioHistory();
+
+    return createdAccount.id;
   },
   addTransaction: (payload) => {
     const transactionId = `txn-${Date.now()}`;
@@ -112,9 +195,19 @@ export const useDemoStore = create<DemoState>((set) => ({
 
     return transactionId;
   },
-  deleteAccount: (accountId) =>
+  deleteAccount: async (accountId) => {
+    const token = get().authToken;
+    if (!token) {
+      throw new Error('You must be logged in to delete an account.');
+    }
+
+    await removeAccount(token, accountId);
+
     set((state) => ({
       accounts: state.accounts.filter((account) => account.id !== accountId),
       transactions: state.transactions.filter((transaction) => transaction.accountId !== accountId),
-    })),
+    }));
+
+    await get().loadPortfolioHistory();
+  },
 }));

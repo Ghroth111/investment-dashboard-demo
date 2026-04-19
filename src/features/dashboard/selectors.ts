@@ -4,6 +4,8 @@ import type {
   DashboardSummary,
   DistributionItem,
   ExchangeRates,
+  TrendPoint,
+  TrendRange,
 } from '../../types/models';
 
 export function convertAmount(
@@ -61,6 +63,7 @@ export function getDashboardSummary(
   accounts: Account[],
   baseCurrency: CurrencyCode,
   rates: ExchangeRates,
+  portfolioHistory?: Record<TrendRange, TrendPoint[]>,
 ): DashboardSummary {
   const totals = accounts.reduce(
     (accumulator, account) => {
@@ -68,12 +71,6 @@ export function getDashboardSummary(
 
       accumulator.totalAssets += convertAmount(
         metrics.totalValue,
-        account.currency,
-        baseCurrency,
-        rates,
-      );
-      accumulator.todayChange += convertAmount(
-        metrics.todayChange,
         account.currency,
         baseCurrency,
         rates,
@@ -106,9 +103,21 @@ export function getDashboardSummary(
     },
   );
 
+  const oneDaySeries = portfolioHistory?.['1D'] ?? [];
+  const latestPoint = oneDaySeries.at(-1);
+  const previousPoint = oneDaySeries.at(-2);
+  const snapshotTodayChangeUsd =
+    latestPoint && previousPoint ? latestPoint.valueUsd - previousPoint.valueUsd : 0;
+  const snapshotTodayChange = convertAmount(
+    snapshotTodayChangeUsd,
+    'USD',
+    baseCurrency,
+    rates,
+  );
+
   return {
     totalAssets: totals.totalAssets,
-    todayChange: totals.todayChange,
+    todayChange: snapshotTodayChange,
     cumulativeReturn: totals.cumulativeReturn,
     cumulativeReturnRate: totals.costBase === 0 ? 0 : totals.cumulativeReturn / totals.costBase,
     accountCount: accounts.length,

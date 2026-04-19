@@ -1,6 +1,6 @@
 # 衡策资产 Demo
 
-一个仅前端的高保真投资整合资产看板 App Demo，基于 `React Native + Expo + TypeScript` 开发。当前阶段不接后端、不接数据库、不接真实 API，所有数据都来自本地 mock，并保留首发版本的页面结构、功能边界和主要交互流程。
+一个投资整合资产看板 App Demo，前端基于 `React Native + Expo + TypeScript`，并新增了一个轻量后端。当前已经接入最小真实账号系统、SQLite 账户持仓存储，以及 Twelve Data 美股搜索和现价；交易主数据仍以本地 mock 为主。
 
 ## 已实现内容
 
@@ -9,6 +9,8 @@
 - 首页资产看板：总资产、趋势图、资产类别分布、平台分布、快捷操作
 - 账户模块：列表、搜索、筛选、详情、删除
 - 添加账户流程：API 接入占位、截图导入占位、手动录入
+- 登录页支持真实注册和登录
+- 手动录入页支持 Twelve Data 美股搜索和实时现价填充
 - 记录页：资金流列表与记账模块占位
 - 设置页：基础货币切换、汇率说明、路线图、退出登录
 - 全局 mock 数据管理与 Zustand 状态
@@ -26,6 +28,25 @@
 - IBM Plex Sans 字体
 
 ## 启动方式
+
+先启动后端：
+
+```bash
+cd ../investment-dashboard-backend
+cp .env.example .env
+# 填入 TWELVE_DATA_API_KEY
+npm start
+```
+
+内置演示账号：
+
+```text
+demo@hcasset.local / Demo123456
+```
+
+这个账号会看到预置到账户表里的演示资产和现有 mock 交易数据；新注册账号默认是空数据。
+
+再启动前端：
 
 ```bash
 npm install
@@ -98,10 +119,11 @@ investment-dashboard-demo
 
 ## 当前边界
 
-- 不含真实登录鉴权
-- 不含真实 API 接入
+- 已接入最小真实注册/登录，使用 SQLite + JWT
+- 内置 demo 账号会加载 SQLite 中的预置演示账户与 mock 交易；新账号默认空白
+- 仅手动录入页接入了 Twelve Data 的真实搜索和现价
 - 不含真实截图识别
-- 不含数据库与后端
+- 交易数据暂未真正持久化到数据库表中
 - 不含推送通知和 AI 建议
 
 ## 后续建议

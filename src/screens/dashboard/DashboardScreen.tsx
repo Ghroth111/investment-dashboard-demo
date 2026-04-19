@@ -37,7 +37,12 @@ export function DashboardScreen({ navigation }: AppTabScreenProps<'Dashboard'>) 
     );
   }
 
-  const summary = getDashboardSummary(accounts, user.baseCurrency, exchangeRates);
+  const summary = getDashboardSummary(
+    accounts,
+    user.baseCurrency,
+    exchangeRates,
+    portfolioHistory,
+  );
   const categoryDistribution = getCategoryDistribution(accounts, user.baseCurrency, exchangeRates);
   const platformDistribution = getPlatformDistribution(accounts, user.baseCurrency, exchangeRates);
   const quickAccounts = getTopAccounts(accounts);

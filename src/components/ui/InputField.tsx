@@ -10,6 +10,7 @@ interface InputFieldProps {
   secureTextEntry?: boolean;
   keyboardType?: KeyboardTypeOptions;
   multiline?: boolean;
+  editable?: boolean;
 }
 
 export function InputField({
@@ -20,6 +21,7 @@ export function InputField({
   secureTextEntry,
   keyboardType,
   multiline,
+  editable = true,
 }: InputFieldProps) {
   return (
     <View style={styles.container}>
@@ -32,6 +34,7 @@ export function InputField({
         secureTextEntry={secureTextEntry}
         keyboardType={keyboardType}
         multiline={multiline}
+        editable={editable}
         style={[styles.input, multiline ? styles.multiline : null]}
       />
     </View>

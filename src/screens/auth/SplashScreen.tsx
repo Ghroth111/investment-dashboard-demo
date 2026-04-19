@@ -6,15 +6,15 @@ import { useDemoStore } from '../../store/demoStore';
 import { colors, fontFamilies, spacing } from '../../theme';
 
 export function SplashScreen() {
-  const finishSplash = useDemoStore((state) => state.finishSplash);
+  const restoreSession = useDemoStore((state) => state.restoreSession);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      finishSplash();
-    }, 1600);
+      void restoreSession();
+    }, 800);
 
     return () => clearTimeout(timer);
-  }, [finishSplash]);
+  }, [restoreSession]);
 
   return (
     <LinearGradient

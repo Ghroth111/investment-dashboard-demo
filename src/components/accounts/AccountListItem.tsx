@@ -45,7 +45,7 @@ export function AccountListItem({
             <Text style={styles.platform}>{account.platform}</Text>
             <Text style={styles.name}>{account.name}</Text>
             <Text style={styles.subtitle}>
-              {typeLabels[account.type]} · {account.currency} · {formatDateTime(account.updatedAt)}
+              {typeLabels[account.type]} · {account.holdings.length} 个持仓 · {account.currency} · {formatDateTime(account.updatedAt)}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />

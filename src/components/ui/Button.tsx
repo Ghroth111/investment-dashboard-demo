@@ -23,9 +23,12 @@ export function Button({
   style,
   disabled,
 }: ButtonProps) {
-  async function handlePress() {
-    await Haptics.selectionAsync();
+  function handlePress() {
     onPress();
+
+    void Haptics.selectionAsync().catch(() => {
+      // Haptics can fail on web or unsupported environments; the button should still work.
+    });
   }
 
   return (

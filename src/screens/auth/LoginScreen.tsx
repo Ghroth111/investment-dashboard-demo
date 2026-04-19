@@ -1,18 +1,55 @@
-import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 
+import { demoAuth } from '../../config/demo';
 import { AppScreen } from '../../components/layout/AppScreen';
 import { Button } from '../../components/ui/Button';
 import { InputField } from '../../components/ui/InputField';
 import { SurfaceCard } from '../../components/ui/SurfaceCard';
+import { loginWithEmail, registerWithEmail } from '../../services/auth';
 import { useDemoStore } from '../../store/demoStore';
 import { colors, fontFamilies, radius, spacing } from '../../theme';
 
+type AuthMode = 'login' | 'register';
+
 export function LoginScreen() {
-  const enterDemo = useDemoStore((state) => state.enterDemo);
-  const [email, setEmail] = useState('zhiyuan.chen@example.com');
-  const [password, setPassword] = useState('demo-password');
+  const authenticate = useDemoStore((state) => state.authenticate);
+  const [mode, setMode] = useState<AuthMode>('login');
+  const [name, setName] = useState(demoAuth.name);
+  const [email, setEmail] = useState(demoAuth.email);
+  const [password, setPassword] = useState(demoAuth.password);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const isRegisterMode = mode === 'register';
+
+  async function handleSubmit() {
+    if (submitting) {
+      return;
+    }
+
+    setSubmitting(true);
+    setErrorMessage('');
+
+    try {
+      const result = isRegisterMode
+        ? await registerWithEmail({ name, email, password })
+        : await loginWithEmail({ email, password });
+
+      await authenticate({
+        user: result.user,
+        token: result.token,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : '认证失败，请检查后端服务或输入内容。';
+      setErrorMessage(message);
+      Alert.alert(isRegisterMode ? '注册失败' : '登录失败', message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <AppScreen scrollable={false} contentStyle={styles.content}>
@@ -22,26 +59,40 @@ export function LoginScreen() {
         </View>
         <View style={styles.heroCopy}>
           <Text style={styles.brand}>衡策资产</Text>
-          <Text style={styles.heroTitle}>投资整合资产看板</Text>
+          <Text style={styles.heroTitle}>真实账号入口已接入</Text>
           <Text style={styles.heroDescription}>
-            为首发版本验证页面结构、主要流程与数据边界的高保真前端 Demo。
+            现在可以通过后端完成最小注册和登录，再进入投资看板 Demo。
           </Text>
         </View>
         <View style={styles.pillRow}>
           <View style={styles.pill}>
-            <Text style={styles.pillText}>4 个账户源</Text>
+            <Text style={styles.pillText}>SQLite 用户库</Text>
           </View>
           <View style={styles.pill}>
-            <Text style={styles.pillText}>跨币种统一视图</Text>
+            <Text style={styles.pillText}>JWT 会话</Text>
+          </View>
+          <View style={styles.pill}>
+            <Text style={styles.pillText}>Demo 资产已预置</Text>
           </View>
         </View>
       </View>
 
       <SurfaceCard style={styles.formCard}>
-        <Text style={styles.formTitle}>进入 Demo</Text>
+        <Text style={styles.formTitle}>{isRegisterMode ? '创建账号' : '登录账号'}</Text>
         <Text style={styles.formDescription}>
-          当前阶段不接真实鉴权，登录与体验按钮都会直接进入前端演示环境。
+          {isRegisterMode
+            ? '新注册账号默认没有任何资产数据，方便从空白状态开始。'
+            : '默认已填入内置演示账号。登录后会看到现有的 mock 资产和交易数据。'}
         </Text>
+
+        {isRegisterMode ? (
+          <InputField
+            label="姓名"
+            value={name}
+            onChangeText={setName}
+            placeholder="请输入姓名"
+          />
+        ) : null}
 
         <InputField
           label="邮箱"
@@ -54,12 +105,39 @@ export function LoginScreen() {
           value={password}
           onChangeText={setPassword}
           secureTextEntry
-          placeholder="请输入密码"
+          placeholder="至少 8 位"
         />
 
-        <Button label="体验 Demo" onPress={enterDemo} icon="arrow-forward" />
-        <Button label="登录" onPress={enterDemo} variant="secondary" />
-        <Text style={styles.registerHint}>注册入口预留中，正式版将接入真实账号体系。</Text>
+        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+
+        <Button
+          label={
+            submitting
+              ? isRegisterMode
+                ? '注册中...'
+                : '登录中...'
+              : isRegisterMode
+                ? '注册并进入'
+                : '登录'
+          }
+          onPress={() => {
+            void handleSubmit();
+          }}
+          icon="arrow-forward"
+          disabled={submitting}
+        />
+        <Button
+          label={isRegisterMode ? '已有账号，去登录' : '没有账号，去注册'}
+          onPress={() => {
+            setMode(isRegisterMode ? 'login' : 'register');
+            setErrorMessage('');
+          }}
+          variant="secondary"
+          disabled={submitting}
+        />
+        <Text style={styles.registerHint}>
+          Demo 账号：{demoAuth.email} / {demoAuth.password}
+        </Text>
       </SurfaceCard>
     </AppScreen>
   );
@@ -135,6 +213,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
     color: colors.textMuted,
+  },
+  errorText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.negative,
   },
   registerHint: {
     fontFamily: fontFamilies.regular,

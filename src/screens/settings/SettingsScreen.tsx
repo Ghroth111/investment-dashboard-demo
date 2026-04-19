@@ -71,8 +71,10 @@ export function SettingsScreen() {
 
       <SurfaceCard style={styles.card}>
         <Text style={styles.sectionTitle}>数据来源与边界</Text>
-        <Text style={styles.noteLine}>所有账户、持仓、图表和记录均来自本地 mock 数据。</Text>
-        <Text style={styles.noteLine}>API、截图识别、数据库、鉴权、通知和 AI 建议均未接入真实能力。</Text>
+        <Text style={styles.noteLine}>账户和持仓已接入按用户隔离的 SQLite 数据。</Text>
+        <Text style={styles.noteLine}>手动录入页已接入 Twelve Data，用于搜索美股标的并带入实时现价。</Text>
+        <Text style={styles.noteLine}>最小账号注册和登录已接入 SQLite + JWT。</Text>
+        <Text style={styles.noteLine}>交易、截图识别、通知和 AI 建议仍未接入真实后端能力。</Text>
       </SurfaceCard>
 
       <SurfaceCard style={styles.card}>
