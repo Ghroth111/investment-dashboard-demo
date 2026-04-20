@@ -20,6 +20,21 @@ import type { RootStackScreenProps } from '../../navigation/types';
 
 type SyncState = 'idle' | 'syncing' | 'error' | 'success';
 
+async function confirmDeleteAccount() {
+  const browserConfirm = (globalThis as { confirm?: (message?: string) => boolean }).confirm;
+
+  if (typeof browserConfirm === 'function') {
+    return browserConfirm('这会从当前账号下的 SQLite 账户数据中移除该账户。是否继续删除？');
+  }
+
+  return new Promise<boolean>((resolve) => {
+    Alert.alert('删除账户', '这会从当前账号下的 SQLite 账户数据中移除该账户。', [
+      { text: '取消', style: 'cancel', onPress: () => resolve(false) },
+      { text: '删除', style: 'destructive', onPress: () => resolve(true) },
+    ]);
+  });
+}
+
 export function AccountDetailScreen({
   navigation,
   route,
@@ -31,6 +46,7 @@ export function AccountDetailScreen({
   const account = accounts.find((item) => item.id === route.params.accountId);
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [firstRefreshShouldFail, setFirstRefreshShouldFail] = useState(true);
+  const [deleting, setDeleting] = useState(false);
 
   if (!account) {
     return (
@@ -67,25 +83,28 @@ export function AccountDetailScreen({
     exchangeRates,
   );
 
-  function handleDelete() {
-    Alert.alert('删除账户', '这会从当前账号下的 SQLite 账户数据中移除该账户。', [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '删除',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteAccount(currentAccount.id);
-            navigation.goBack();
-          } catch (error) {
-            Alert.alert(
-              '删除失败',
-              error instanceof Error ? error.message : '账户删除失败，请稍后重试。',
-            );
-          }
-        },
-      },
-    ]);
+  async function handleDelete() {
+    if (deleting) {
+      return;
+    }
+
+    const shouldDelete = await confirmDeleteAccount();
+    if (!shouldDelete) {
+      return;
+    }
+
+    try {
+      setDeleting(true);
+      await deleteAccount(currentAccount.id);
+      navigation.goBack();
+    } catch (error) {
+      Alert.alert(
+        '删除失败',
+        error instanceof Error ? error.message : '账户删除失败，请稍后重试。',
+      );
+    } finally {
+      setDeleting(false);
+    }
   }
 
   function handleRefresh() {
@@ -158,10 +177,13 @@ export function AccountDetailScreen({
             disabled={syncState === 'syncing'}
           />
           <Button
-            label="删除账户"
-            onPress={handleDelete}
+            label={deleting ? '删除中...' : '删除账户'}
+            onPress={() => {
+              void handleDelete();
+            }}
             variant="danger"
             style={styles.actionButton}
+            disabled={deleting}
           />
         </View>
 

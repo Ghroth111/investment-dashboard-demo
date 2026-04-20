@@ -1,7 +1,12 @@
 import { create } from 'zustand';
 
 import { demoAuth } from '../config/demo';
-import { createManualAccount, fetchAccounts, removeAccount } from '../services/accounts';
+import {
+  createManualAccount,
+  fetchAccounts,
+  importScreenshotAccount,
+  removeAccount,
+} from '../services/accounts';
 import { fetchCurrentUser } from '../services/auth';
 import { fetchPortfolioHistory } from '../services/portfolioHistory';
 import { clearSession, readSession, saveSession } from '../services/sessionStorage';
@@ -12,6 +17,8 @@ import type {
   DemoPhase,
   ExchangeRates,
   ManualAccountPayload,
+  ScreenshotImportPayload,
+  ScreenshotImportResult,
   Transaction,
   TrendPoint,
   TrendRange,
@@ -34,6 +41,7 @@ interface DemoState {
   logout: () => void;
   setBaseCurrency: (currency: UserProfile['baseCurrency']) => void;
   addManualAccount: (payload: ManualAccountPayload) => Promise<string>;
+  addScreenshotAccount: (payload: ScreenshotImportPayload) => Promise<ScreenshotImportResult>;
   addTransaction: (payload: AddTransactionPayload) => string;
   deleteAccount: (accountId: string) => Promise<void>;
 }
@@ -178,6 +186,14 @@ export const useDemoStore = create<DemoState>((set, get) => ({
     await get().loadPortfolioHistory();
 
     return createdAccount.id;
+  },
+  addScreenshotAccount: async (payload) => {
+    const token = get().authToken;
+    if (!token) {
+      throw new Error('You must be logged in to import a screenshot.');
+    }
+
+    return importScreenshotAccount(token, payload);
   },
   addTransaction: (payload) => {
     const transactionId = `txn-${Date.now()}`;

@@ -2,6 +2,8 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import type { ManualEntryPrefill } from '../types/models';
+
 export type RootStackParamList = {
   Splash: undefined;
   Login: undefined;
@@ -11,7 +13,7 @@ export type RootStackParamList = {
   AddTransaction: undefined;
   ApiConnect: undefined;
   ScreenshotImport: undefined;
-  ManualEntry: undefined;
+  ManualEntry: { prefill?: ManualEntryPrefill } | undefined;
 };
 
 export type TabParamList = {

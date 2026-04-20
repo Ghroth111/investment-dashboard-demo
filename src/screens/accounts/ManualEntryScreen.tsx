@@ -23,6 +23,7 @@ import type {
   AccountType,
   AssetClass,
   CurrencyCode,
+  ManualEntryPrefill,
   ManualHoldingInput,
 } from '../../types/models';
 import { formatCurrency } from '../../utils/formatters';
@@ -85,6 +86,32 @@ function createHoldingDraft(): HoldingDraft {
     micCode: '',
     country: 'United States',
     instrumentType: '',
+  };
+}
+
+function createHoldingDraftFromPrefill(
+  prefill?: ManualEntryPrefill['holdings'][number],
+): HoldingDraft {
+  const draft = createHoldingDraft();
+
+  if (!prefill) {
+    return draft;
+  }
+
+  return {
+    ...draft,
+    name: prefill.name || '',
+    symbol: prefill.symbol || '',
+    assetClass: prefill.assetClass || 'Stock',
+    quantity: prefill.quantity !== null && prefill.quantity !== undefined ? String(prefill.quantity) : '',
+    currentPrice:
+      prefill.currentPrice !== null && prefill.currentPrice !== undefined
+        ? formatLivePrice(prefill.currentPrice)
+        : '',
+    costBasis:
+      prefill.costBasis !== null && prefill.costBasis !== undefined
+        ? String(prefill.costBasis)
+        : '',
   };
 }
 
@@ -333,14 +360,21 @@ function HoldingEditorCard({
   );
 }
 
-export function ManualEntryScreen({ navigation }: RootStackScreenProps<'ManualEntry'>) {
+export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'ManualEntry'>) {
   const addManualAccount = useDemoStore((state) => state.addManualAccount);
-  const [accountName, setAccountName] = useState('');
-  const [platformName, setPlatformName] = useState('');
-  const [accountType, setAccountType] = useState<AccountType>('Manual');
-  const [currency, setCurrency] = useState<CurrencyCode>('USD');
-  const [cashBalance, setCashBalance] = useState('0');
-  const [holdings, setHoldings] = useState<HoldingDraft[]>([createHoldingDraft()]);
+  const prefill = route.params?.prefill;
+  const [accountName, setAccountName] = useState(prefill?.name || '');
+  const [platformName, setPlatformName] = useState(prefill?.platform || '');
+  const [accountType, setAccountType] = useState<AccountType>(prefill?.type || 'Manual');
+  const [currency, setCurrency] = useState<CurrencyCode>(prefill?.currency || 'USD');
+  const [cashBalance, setCashBalance] = useState(
+    prefill?.cashBalance !== null && prefill?.cashBalance !== undefined ? String(prefill.cashBalance) : '0',
+  );
+  const [holdings, setHoldings] = useState<HoldingDraft[]>(
+    prefill?.holdings && prefill.holdings.length > 0
+      ? prefill.holdings.map((holding) => createHoldingDraftFromPrefill(holding))
+      : [createHoldingDraft()],
+  );
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
@@ -442,7 +476,7 @@ export function ManualEntryScreen({ navigation }: RootStackScreenProps<'ManualEn
         <View style={styles.headerCopy}>
           <Text style={styles.title}>手动录入</Text>
           <Text style={styles.description}>
-            现在可以先搜美股标的，再自动带入真实现价。
+            {prefill ? '截图识别结果已经预填，你可以继续删改后再保存。' : '现在可以先搜美股标的，再自动带入真实现价。'}
           </Text>
         </View>
       </View>

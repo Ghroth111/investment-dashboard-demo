@@ -28,7 +28,12 @@ export function HoldingRow({ holding, baseCurrency, exchangeRates }: HoldingRowP
     baseCurrency,
     exchangeRates,
   );
-  const convertedCostValue = convertAmount(costValue, holding.currency, baseCurrency, exchangeRates);
+  const convertedCostBasis = convertAmount(
+    holding.costBasis,
+    holding.currency,
+    baseCurrency,
+    exchangeRates,
+  );
   const convertedPnl = convertAmount(pnl, holding.currency, baseCurrency, exchangeRates);
 
   return (
@@ -44,7 +49,7 @@ export function HoldingRow({ holding, baseCurrency, exchangeRates }: HoldingRowP
         <Text style={styles.value}>{formatCurrency(convertedMarketValue, baseCurrency, 0)}</Text>
         <Text style={styles.meta}>
           现价 {formatCurrency(convertedCurrentPrice, baseCurrency, 2)} · 成本{' '}
-          {formatCurrency(convertedCostValue, baseCurrency, 0)}
+          {formatCurrency(convertedCostBasis, baseCurrency, 2)}
         </Text>
         <Text style={[styles.pnl, convertedPnl >= 0 ? styles.positive : styles.negative]}>
           {formatSignedCurrency(convertedPnl, baseCurrency, 0)} · {formatPercent(pnlRate)}

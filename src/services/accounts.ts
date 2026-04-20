@@ -1,5 +1,10 @@
 import { backendApiBaseUrl } from '../config/api';
-import type { Account, ManualAccountPayload } from '../types/models';
+import type {
+  Account,
+  ManualAccountPayload,
+  ScreenshotImportPayload,
+  ScreenshotImportResult,
+} from '../types/models';
 
 async function requestJson<T>(path: string, token: string, init?: RequestInit) {
   const response = await fetch(`${backendApiBaseUrl}${path}`, {
@@ -40,5 +45,12 @@ export async function createManualAccount(token: string, payload: ManualAccountP
 export async function removeAccount(token: string, accountId: string) {
   await requestJson<{ ok: true }>(`/accounts/${accountId}`, token, {
     method: 'DELETE',
+  });
+}
+
+export async function importScreenshotAccount(token: string, payload: ScreenshotImportPayload) {
+  return requestJson<ScreenshotImportResult>('/accounts/screenshot-import', token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
   });
 }

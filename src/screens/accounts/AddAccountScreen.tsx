@@ -30,8 +30,8 @@ export function AddAccountScreen({ navigation }: RootStackScreenProps<'AddAccoun
       <AddAccountMethodCard
         icon="scan-outline"
         title="截图导入"
-        description="保留 AI 识别导入路径，展示上传区、识别示意与正式版能力边界。"
-        badge="即将支持"
+        description="上传账户截图后，由后端调用千问视觉理解接口识别并直接保存到账户。"
+        badge="已接通"
         onPress={() => navigation.navigate('ScreenshotImport')}
       />
       <AddAccountMethodCard
@@ -45,8 +45,8 @@ export function AddAccountScreen({ navigation }: RootStackScreenProps<'AddAccoun
       <SurfaceCard style={styles.timelineCard}>
         <Text style={styles.sectionTitle}>接入路径说明</Text>
         <Text style={styles.noteLine}>1. 先选择接入方式，再决定是否需要输入平台信息或上传材料。</Text>
-        <Text style={styles.noteLine}>2. API 与截图入口当前只展示未来首发版本的入口形态。</Text>
-        <Text style={styles.noteLine}>3. 手动录入是本轮唯一会真正更新前端状态的新增路径。</Text>
+        <Text style={styles.noteLine}>2. 截图导入和手动录入都会真实写入后端并刷新首页资产视图。</Text>
+        <Text style={styles.noteLine}>3. API 接入当前仍是占位流程，不会保存真实凭证。</Text>
       </SurfaceCard>
     </AppScreen>
   );

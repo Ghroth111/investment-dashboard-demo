@@ -142,6 +142,62 @@ export interface ManualAccountPayload {
   holdings: ManualHoldingInput[];
 }
 
+export interface ManualEntryHoldingDraft {
+  name: string | null;
+  symbol: string | null;
+  assetClass: AssetClass | null;
+  quantity: number | null;
+  currentPrice: number | null;
+  costBasis: number | null;
+}
+
+export interface ManualEntryPrefill {
+  name: string | null;
+  platform: string | null;
+  type: AccountType | null;
+  currency: CurrencyCode | null;
+  cashBalance: number | null;
+  holdings: ManualEntryHoldingDraft[];
+}
+
+export interface ScreenshotImportPayload {
+  imageBase64: string;
+  mimeType: string;
+  fileName?: string;
+}
+
+export interface ExtractedScreenshotPosition {
+  symbol: string | null;
+  name: string | null;
+  quantity: number | null;
+  cost_price: number | null;
+  daily_pnl: number | null;
+  total_pnl: number | null;
+}
+
+export interface ExtractedScreenshotPortfolio {
+  platform_name: string | null;
+  account_type: string | null;
+  currency: string | null;
+  cash_amount: number | null;
+  total_assets: number | null;
+  account_pnl: number | null;
+  daily_pnl: number | null;
+  positions: ExtractedScreenshotPosition[];
+}
+
+export interface ScreenshotImportResult {
+  draft: ManualEntryPrefill;
+  extracted: ExtractedScreenshotPortfolio;
+  normalized: {
+    account_type: AccountType;
+    currency: CurrencyCode;
+    accepted_positions: number;
+    rejected_positions: number;
+  };
+  warnings: string[];
+}
+
 export interface AddTransactionPayload {
   title: string;
   type: TransactionType;
