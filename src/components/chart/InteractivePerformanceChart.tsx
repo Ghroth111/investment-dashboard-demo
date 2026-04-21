@@ -32,6 +32,7 @@ interface InteractivePerformanceChartProps {
   currency: CurrencyCode;
   series: PerformanceSeries;
   defaultRange?: PerformanceRange;
+  emptyMessage?: string;
 }
 
 const rangeOptions: { label: string; value: PerformanceRange }[] = [
@@ -74,12 +75,14 @@ export function InteractivePerformanceChart({
   currency,
   series,
   defaultRange = 'YTD',
+  emptyMessage = '暂无真实历史数据，记录更多快照后这里会显示收益曲线。',
 }: InteractivePerformanceChartProps) {
   const [range, setRange] = useState<PerformanceRange>(defaultRange);
   const [chartWidth, setChartWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   const [scrubbing, setScrubbing] = useState(false);
   const points = series[range] ?? [];
+  const hasHistory = points.length >= 2;
 
   useEffect(() => {
     setActiveIndex(Math.max(points.length - 1, 0));
@@ -190,7 +193,9 @@ export function InteractivePerformanceChart({
                 </Text>
               </View>
             </>
-          ) : null}
+          ) : (
+            <Text style={styles.emptyValue}>历史数据不足</Text>
+          )}
         </View>
 
         {activePoint ? (
@@ -242,9 +247,13 @@ export function InteractivePerformanceChart({
               </>
             ) : null}
           </Svg>
-        ) : null}
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>{emptyMessage}</Text>
+          </View>
+        )}
 
-        {!scrubbing ? <Text style={styles.dragHint}>按住并左右拖动可查看任意时点收益</Text> : null}
+        {!scrubbing && hasHistory ? <Text style={styles.dragHint}>按住并左右拖动可查看任意时点收益</Text> : null}
       </View>
 
       <View style={styles.rangeRow}>
@@ -301,6 +310,13 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
     color: colors.text,
   },
+  emptyValue: {
+    marginTop: spacing.sm,
+    fontFamily: fontFamilies.semibold,
+    fontSize: 26,
+    lineHeight: 34,
+    color: colors.textMuted,
+  },
   returnRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -330,6 +346,19 @@ const styles = StyleSheet.create({
   chartWrap: {
     minHeight: 226,
     justifyContent: 'flex-end',
+  },
+  emptyState: {
+    minHeight: 226,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  emptyStateText: {
+    textAlign: 'center',
+    fontFamily: fontFamilies.regular,
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.textMuted,
   },
   dragHint: {
     position: 'absolute',

@@ -108,6 +108,7 @@ export interface Transaction {
 export interface TrendPoint {
   label: string;
   valueUsd: number;
+  timestamp?: string;
 }
 
 export interface PerformancePoint {
@@ -194,9 +195,14 @@ export interface ManualEntryPrefill {
 }
 
 export interface ScreenshotImportPayload {
-  imageBase64: string;
-  mimeType: string;
+  imageBase64?: string;
+  mimeType?: string;
   fileName?: string;
+  screenshots?: Array<{
+    imageBase64: string;
+    mimeType: string;
+    fileName?: string;
+  }>;
 }
 
 export interface ExtractedScreenshotPosition {

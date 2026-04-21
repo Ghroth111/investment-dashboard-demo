@@ -17,6 +17,7 @@ export function DashboardScreen({ navigation }: AppTabScreenProps<'Dashboard'>) 
   const user = useDemoStore((state) => state.user);
   const accounts = useDemoStore((state) => state.accounts);
   const exchangeRates = useDemoStore((state) => state.exchangeRates);
+  const portfolioHistory = useDemoStore((state) => state.portfolioHistory);
 
   if (accounts.length === 0) {
     return (
@@ -42,6 +43,7 @@ export function DashboardScreen({ navigation }: AppTabScreenProps<'Dashboard'>) 
         accounts={accounts}
         currency={user.baseCurrency}
         exchangeRates={exchangeRates}
+        portfolioHistory={portfolioHistory}
         onAnalyticsPress={() => navigation.navigate('Accounts')}
       />
 

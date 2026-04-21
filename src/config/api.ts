@@ -8,8 +8,8 @@ function inferLocalBackendHost() {
   return Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
 }
 
-// const remoteApiBaseUrl = `http://${inferLocalBackendHost()}:4000/api`;
-const remoteApiBaseUrl = 'http://47.101.191.50:4010/api';
+const remoteApiBaseUrl = `http://${inferLocalBackendHost()}:4000/api`;
+// const remoteApiBaseUrl = 'http://47.101.191.50:4010/api';
 
 // 环境切换只改这里：
 // 1. 本地开发时，使用 localApiBaseUrl

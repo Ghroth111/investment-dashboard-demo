@@ -27,6 +27,17 @@ const rangeConfigs: Record<
   ALL: { points: 42, lookbackDays: 900 },
 };
 
+export function createEmptyPerformanceSeries(): PerformanceSeries {
+  return {
+    '7D': [],
+    '1M': [],
+    '6M': [],
+    YTD: [],
+    '1Y': [],
+    ALL: [],
+  };
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -137,14 +148,7 @@ function buildSeries({
 
       return series;
     },
-    {
-      '7D': [],
-      '1M': [],
-      '6M': [],
-      YTD: [],
-      '1Y': [],
-      ALL: [],
-    },
+    createEmptyPerformanceSeries(),
   );
 }
 

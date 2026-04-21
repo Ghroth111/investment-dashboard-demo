@@ -10,7 +10,7 @@ import { Button } from '../../components/ui/Button';
 import { SurfaceCard } from '../../components/ui/SurfaceCard';
 import { getHoldingAssetKey } from '../../features/assets/selectors';
 import { convertAmount, getAccountMetrics } from '../../features/dashboard/selectors';
-import { buildAccountPerformanceSeries } from '../../features/performance/series';
+import { createEmptyPerformanceSeries } from '../../features/performance/series';
 import type { RootStackScreenProps } from '../../navigation/types';
 import { useDemoStore } from '../../store/demoStore';
 import { colors, fontFamilies, spacing } from '../../theme';
@@ -111,10 +111,7 @@ export function AccountDetailScreen({
     user.baseCurrency,
     exchangeRates,
   );
-  const performanceSeries = useMemo(
-    () => buildAccountPerformanceSeries(currentAccount, user.baseCurrency, exchangeRates),
-    [currentAccount, exchangeRates, user.baseCurrency],
-  );
+  const performanceSeries = useMemo(() => createEmptyPerformanceSeries(), []);
 
   async function handleDelete() {
     if (deleting) {
@@ -179,6 +176,7 @@ export function AccountDetailScreen({
         currency={user.baseCurrency}
         series={performanceSeries}
         defaultRange="YTD"
+        emptyMessage="账户详情页当前不再编造收益曲线；等后端记录到账户级历史快照后，这里会显示真实走势。"
       />
 
       <SurfaceCard style={styles.card}>

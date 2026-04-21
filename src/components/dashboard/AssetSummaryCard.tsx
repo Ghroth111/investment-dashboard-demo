@@ -26,13 +26,13 @@ import Svg, {
 } from 'react-native-svg';
 
 import { convertAmount, getAccountMetrics } from '../../features/dashboard/selectors';
-import { buildAccountsPerformanceSeries } from '../../features/performance/series';
 import { colors, fontFamilies, radius, spacing } from '../../theme';
 import type {
   Account,
   AccountType,
   CurrencyCode,
   ExchangeRates,
+  TrendPoint,
   PerformancePoint,
   PerformanceRange,
   PerformanceSeries,
@@ -54,6 +54,7 @@ interface AssetSummaryCardProps {
   accounts: Account[];
   currency: CurrencyCode;
   exchangeRates: ExchangeRates;
+  portfolioHistory: Record<string, TrendPoint[]>;
   onAnalyticsPress: () => void;
 }
 
@@ -190,10 +191,60 @@ function getAggregateMetrics(
   );
 }
 
+function mapHistoryRange(range: PerformanceRange) {
+  switch (range) {
+    case '1M':
+      return '30D';
+    case '6M':
+      return '90D';
+    default:
+      return range;
+  }
+}
+
+function buildOverviewPerformanceSeries(
+  portfolioHistory: Record<string, TrendPoint[]>,
+  currency: CurrencyCode,
+  rates: ExchangeRates,
+) {
+  const emptySeries: PerformanceSeries = {
+    '7D': [],
+    '1M': [],
+    '6M': [],
+    YTD: [],
+    '1Y': [],
+    ALL: [],
+  };
+
+  (Object.keys(emptySeries) as PerformanceRange[]).forEach((range) => {
+    const historyRange = mapHistoryRange(range);
+    const points = portfolioHistory[historyRange] ?? [];
+    const firstPoint = points[0];
+
+    emptySeries[range] = points.map((point) => {
+      const value = convertAmount(point.valueUsd, 'USD', currency, rates);
+      const baseValue = convertAmount(firstPoint?.valueUsd ?? point.valueUsd, 'USD', currency, rates);
+      const gain = value - baseValue;
+
+      return {
+        timestamp: point.timestamp
+          ? new Date(`${point.timestamp}T00:00:00.000Z`).toISOString()
+          : new Date().toISOString(),
+        value,
+        gain,
+        gainRate: baseValue === 0 ? 0 : gain / baseValue,
+      };
+    });
+  });
+
+  return emptySeries;
+}
+
 function buildCategorySegments(
   accounts: Account[],
   currency: CurrencyCode,
   exchangeRates: ExchangeRates,
+  portfolioHistory: Record<string, TrendPoint[]>,
 ) {
   const groupedAccounts = accounts.reduce<Record<AccountType, Account[]>>(
     (accumulator, account) => {
@@ -224,7 +275,7 @@ function buildCategorySegments(
           : overviewMetrics.cumulativeReturn / overviewMetrics.costBase,
       todayChange: overviewMetrics.todayChange,
       lastUpdated: overviewMetrics.lastUpdated,
-      series: buildAccountsPerformanceSeries(accounts, currency, exchangeRates, 'overview'),
+      series: buildOverviewPerformanceSeries(portfolioHistory, currency, exchangeRates),
     },
   ];
 
@@ -244,7 +295,14 @@ function buildCategorySegments(
       cumulativeReturnRate: metrics.costBase === 0 ? 0 : metrics.cumulativeReturn / metrics.costBase,
       todayChange: metrics.todayChange,
       lastUpdated: metrics.lastUpdated,
-      series: buildAccountsPerformanceSeries(bucket, currency, exchangeRates, type),
+      series: {
+        '7D': [],
+        '1M': [],
+        '6M': [],
+        YTD: [],
+        '1Y': [],
+        ALL: [],
+      },
     });
   });
 
@@ -271,6 +329,7 @@ export function AssetSummaryCard({
   accounts,
   currency,
   exchangeRates,
+  portfolioHistory,
   onAnalyticsPress,
 }: AssetSummaryCardProps) {
   const { width } = useWindowDimensions();
@@ -291,14 +350,15 @@ export function AssetSummaryCard({
   const countUpProgress = useRef(new Animated.Value(0)).current;
 
   const segments = useMemo(
-    () => buildCategorySegments(accounts, currency, exchangeRates),
-    [accounts, currency, exchangeRates],
+    () => buildCategorySegments(accounts, currency, exchangeRates, portfolioHistory),
+    [accounts, currency, exchangeRates, portfolioHistory],
   );
   const activeSegment =
     segments.find((segment) => segment.key === activeSegmentKey) ?? segments[0] ?? null;
   const points = activeSegment?.series[range] ?? [];
   const lastPoint = points.at(-1) ?? null;
   const rangeChange = useMemo(() => getRangeChange(points), [points]);
+  const hasSufficientHistory = points.length >= 2;
 
   useEffect(() => {
     setActiveIndex(Math.max(points.length - 1, 0));
@@ -452,18 +512,30 @@ export function AssetSummaryCard({
     setActiveSegmentKey(nextKey);
   };
 
-  if (!activeSegment || !activePoint) {
+  if (!activeSegment) {
     return null;
   }
 
-  const displayedValue = scrubbing ? activePoint.value : animatedMetrics.totalAssets;
-  const displayedCumulative = scrubbing ? activePoint.gain : animatedMetrics.cumulativeReturn;
+  const displayedValue = scrubbing && activePoint ? activePoint.value : animatedMetrics.totalAssets;
+  const displayedCumulative = scrubbing && activePoint ? activePoint.gain : animatedMetrics.cumulativeReturn;
   const displayedCumulativeRate = scrubbing
-    ? activePoint.gainRate
+    ? (activePoint?.gainRate ?? 0)
     : animatedMetrics.cumulativeReturnRate;
-  const primaryChange = scrubbing ? activePoint.gain : animatedMetrics.rangeChange;
-  const primaryChangeRate = scrubbing ? activePoint.gainRate : animatedMetrics.rangeChangeRate;
+  const primaryChange = scrubbing && activePoint ? activePoint.gain : animatedMetrics.rangeChange;
+  const primaryChangeRate = scrubbing && activePoint ? activePoint.gainRate : animatedMetrics.rangeChangeRate;
   const primaryLabel = scrubbing ? '持有收益' : activeRangeMeta.summaryLabel;
+  const visibleTotalAssets = hasSufficientHistory ? displayedValue : activeSegment.totalAssets;
+  const visibleCumulative = hasSufficientHistory
+    ? displayedCumulative
+    : activeSegment.cumulativeReturn;
+  const visibleCumulativeRate = hasSufficientHistory
+    ? displayedCumulativeRate
+    : activeSegment.cumulativeReturnRate;
+  const visibleTodayChange = hasSufficientHistory
+    ? animatedMetrics.todayChange
+    : activeSegment.todayChange;
+  const visiblePrimaryChange = hasSufficientHistory ? primaryChange : 0;
+  const visiblePrimaryChangeRate = hasSufficientHistory ? primaryChangeRate : 0;
 
   return (
     <LinearGradient
@@ -475,10 +547,15 @@ export function AssetSummaryCard({
       <View style={styles.topRow}>
         <View style={styles.summaryBlock}>
           <Text style={styles.eyebrow}>总资产</Text>
-          <Text style={styles.value}>{formatCurrency(displayedValue, currency, 0)}</Text>
+          <Text style={styles.value}>{formatCurrency(visibleTotalAssets, currency, 0)}</Text>
           <View style={styles.performanceRow}>
-            <Text style={[styles.performanceValue, primaryChange >= 0 ? styles.positive : styles.negative]}>
-              {formatSignedCurrency(primaryChange, currency, 0)} ({formatPercent(primaryChangeRate)})
+            <Text
+              style={[
+                styles.performanceValue,
+                visiblePrimaryChange >= 0 ? styles.positive : styles.negative,
+              ]}
+            >
+              {formatSignedCurrency(visiblePrimaryChange, currency, 0)} ({formatPercent(visiblePrimaryChangeRate)})
             </Text>
             <Text style={styles.performanceLabel}>{primaryLabel}</Text>
           </View>
@@ -486,10 +563,10 @@ export function AssetSummaryCard({
             <Text
               style={[
                 styles.performanceValue,
-                animatedMetrics.todayChange >= 0 ? styles.positive : styles.negative,
+                visibleTodayChange >= 0 ? styles.positive : styles.negative,
               ]}
             >
-              {formatSignedCurrency(animatedMetrics.todayChange, currency, 0)}
+              {formatSignedCurrency(visibleTodayChange, currency, 0)}
             </Text>
             <Text style={styles.performanceLabel}>今日盈亏</Text>
           </View>
@@ -543,14 +620,14 @@ export function AssetSummaryCard({
         }}
         {...panResponder.panHandlers}
       >
-        {scrubbing && activeCoordinates ? (
+        {scrubbing && hasSufficientHistory && activeCoordinates && activePoint ? (
           <View style={[styles.floatingDateBadge, { width: floatingDateWidth, left: floatingDateLeft }]}>
             <Text style={styles.floatingDateText}>{formatSummaryDate(activePoint.timestamp, range)}</Text>
           </View>
         ) : null}
 
         <Animated.View style={[styles.chartReveal, { width: animatedChartWidth }]}>
-          {chartWidth > 0 && normalized.length > 0 ? (
+          {chartWidth > 0 && hasSufficientHistory && normalized.length > 0 ? (
             <Svg width={chartWidth} height={chartHeight}>
               <Defs>
                 <SvgLinearGradient id="summaryAreaFill" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -603,10 +680,22 @@ export function AssetSummaryCard({
                 </>
               ) : null}
             </Svg>
-          ) : null}
+          ) : (
+            <View style={styles.emptyChartState}>
+              <Ionicons name="analytics-outline" size={22} color="rgba(255,255,255,0.7)" />
+              <Text style={styles.emptyChartTitle}>历史数据不足</Text>
+              <Text style={styles.emptyChartText}>
+                {activeSegment.key === 'overview'
+                  ? '当前仅展示已保存的真实快照；至少需要两天数据后才会显示收益曲线。'
+                  : '当前只对总览提供真实历史曲线，分类分段暂未记录独立快照。'}
+              </Text>
+            </View>
+          )}
         </Animated.View>
 
-        {!scrubbing ? <Text style={styles.dragHint}>按住图表左右拖动，可查看精确日期与金额</Text> : null}
+        {!scrubbing && hasSufficientHistory ? (
+          <Text style={styles.dragHint}>按住图表左右拖动，可查看精确日期与金额</Text>
+        ) : null}
       </View>
 
       <ScrollView
@@ -641,15 +730,15 @@ export function AssetSummaryCard({
           <Text
             style={[
               styles.footerMetricValue,
-              displayedCumulative >= 0 ? styles.positive : styles.negative,
+              visibleCumulative >= 0 ? styles.positive : styles.negative,
             ]}
           >
-            {formatSignedCurrency(displayedCumulative, currency, 0)}
+            {formatSignedCurrency(visibleCumulative, currency, 0)}
           </Text>
         </View>
         <View style={styles.footerMetric}>
           <Text style={styles.footerMetricLabel}>收益率</Text>
-          <Text style={styles.footerMetricValue}>{formatPercent(displayedCumulativeRate)}</Text>
+          <Text style={styles.footerMetricValue}>{formatPercent(visibleCumulativeRate)}</Text>
         </View>
         <View style={styles.footerMetric}>
           <Text style={styles.footerMetricLabel}>最近更新</Text>
@@ -754,6 +843,25 @@ const styles = StyleSheet.create({
   chartReveal: {
     overflow: 'hidden',
     minHeight: chartHeight,
+  },
+  emptyChartState: {
+    minHeight: chartHeight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    gap: spacing.sm,
+  },
+  emptyChartTitle: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: 15,
+    color: colors.white,
+  },
+  emptyChartText: {
+    textAlign: 'center',
+    fontFamily: fontFamilies.regular,
+    fontSize: 13,
+    lineHeight: 20,
+    color: 'rgba(255,255,255,0.72)',
   },
   floatingDateBadge: {
     position: 'absolute',

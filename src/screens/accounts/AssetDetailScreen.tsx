@@ -7,10 +7,7 @@ import { AppScreen } from '../../components/layout/AppScreen';
 import { ErrorState } from '../../components/states/ErrorState';
 import { SurfaceCard } from '../../components/ui/SurfaceCard';
 import { getAssetSnapshot, getAssetClassLabel, getHoldingAssetKey } from '../../features/assets/selectors';
-import {
-  buildHoldingPerformanceSeries,
-  buildSyntheticPerformanceSeries,
-} from '../../features/performance/series';
+import { createEmptyPerformanceSeries } from '../../features/performance/series';
 import type { RootStackScreenProps } from '../../navigation/types';
 import { useDemoStore } from '../../store/demoStore';
 import { colors, fontFamilies, spacing } from '../../theme';
@@ -66,19 +63,7 @@ export function AssetDetailScreen({
     account && primaryPosition
       ? account.holdings.find((item) => item.id === primaryPosition.holdingId)
       : undefined;
-  const performanceSeries = useMemo(() => {
-    if (holding && account) {
-      return buildHoldingPerformanceSeries(account, holding, user.baseCurrency, exchangeRates);
-    }
-
-    return buildSyntheticPerformanceSeries({
-      seedKey: asset.assetKey,
-      currentValue: asset.marketValue,
-      costValue: asset.costValue,
-      dailyChangeRate: asset.marketValue === 0 ? 0 : asset.todayChange / asset.marketValue,
-      updatedAt: asset.lastUpdated,
-    });
-  }, [account, asset, exchangeRates, holding, user.baseCurrency]);
+  const performanceSeries = useMemo(() => createEmptyPerformanceSeries(), []);
 
   const assetTrades = holdingTrades
     .filter((trade) => trade.assetKey === assetKey)
@@ -105,6 +90,7 @@ export function AssetDetailScreen({
         currency={user.baseCurrency}
         series={performanceSeries}
         defaultRange="YTD"
+        emptyMessage="持仓详情页当前不再编造收益曲线；等后端记录到持仓级真实历史后，这里会显示真实走势。"
       />
 
       <SurfaceCard style={styles.card}>
