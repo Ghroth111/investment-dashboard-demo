@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, fontFamilies, spacing } from '../../theme';
 import type { CurrencyCode, DistributionItem } from '../../types/models';
@@ -10,6 +11,7 @@ interface DistributionBarsProps {
   subtitle: string;
   items: DistributionItem[];
   currency: CurrencyCode;
+  onItemPress?: (item: DistributionItem) => void;
 }
 
 export function DistributionBars({
@@ -17,36 +19,56 @@ export function DistributionBars({
   subtitle,
   items,
   currency,
+  onItemPress,
 }: DistributionBarsProps) {
   return (
     <SurfaceCard style={styles.card}>
-      <Text style={styles.title}>{title}</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>{title}</Text>
+        {onItemPress ? <Text style={styles.headerHint}>查看明细</Text> : null}
+      </View>
       <Text style={styles.subtitle}>{subtitle}</Text>
       <View style={styles.items}>
         {items.map((item) => (
-          <View key={item.label} style={styles.item}>
-            <View style={styles.itemHeader}>
-              <View style={styles.itemLabelWrap}>
-                <View style={[styles.swatch, { backgroundColor: item.tone }]} />
-                <Text style={styles.itemLabel}>{item.label}</Text>
+          <Pressable
+            key={item.label}
+            disabled={!onItemPress}
+            onPress={() => onItemPress?.(item)}
+            style={({ pressed }) => [
+              styles.item,
+              onItemPress ? styles.itemInteractive : null,
+              pressed && onItemPress ? styles.itemPressed : null,
+            ]}
+          >
+            <View style={styles.itemTopRow}>
+              <View style={styles.itemMain}>
+                <View style={styles.itemHeader}>
+                  <View style={styles.itemLabelWrap}>
+                    <View style={[styles.swatch, { backgroundColor: item.tone }]} />
+                    <Text style={styles.itemLabel}>{item.label}</Text>
+                  </View>
+                  <View style={styles.itemNumbers}>
+                    <Text style={styles.itemValue}>{formatCurrency(item.value, currency, 0)}</Text>
+                    <Text style={styles.itemPercent}>{formatPercent(item.percentage)}</Text>
+                  </View>
+                </View>
+                <View style={styles.track}>
+                  <View
+                    style={[
+                      styles.fill,
+                      {
+                        width: `${Math.max(item.percentage * 100, 6)}%`,
+                        backgroundColor: item.tone,
+                      },
+                    ]}
+                  />
+                </View>
               </View>
-              <View style={styles.itemNumbers}>
-                <Text style={styles.itemValue}>{formatCurrency(item.value, currency, 0)}</Text>
-                <Text style={styles.itemPercent}>{formatPercent(item.percentage)}</Text>
-              </View>
+              {onItemPress ? (
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              ) : null}
             </View>
-            <View style={styles.track}>
-              <View
-                style={[
-                  styles.fill,
-                  {
-                    width: `${Math.max(item.percentage * 100, 6)}%`,
-                    backgroundColor: item.tone,
-                  },
-                ]}
-              />
-            </View>
-          </View>
+          </Pressable>
         ))}
       </View>
     </SurfaceCard>
@@ -57,10 +79,21 @@ const styles = StyleSheet.create({
   card: {
     gap: spacing.sm,
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
   title: {
     fontFamily: fontFamilies.semibold,
     fontSize: 17,
     color: colors.text,
+  },
+  headerHint: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 12,
+    color: colors.accent,
   },
   subtitle: {
     fontFamily: fontFamilies.regular,
@@ -74,6 +107,23 @@ const styles = StyleSheet.create({
   item: {
     gap: spacing.sm,
   },
+  itemInteractive: {
+    padding: spacing.md,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceMuted,
+  },
+  itemPressed: {
+    opacity: 0.9,
+  },
+  itemTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  itemMain: {
+    flex: 1,
+    gap: spacing.sm,
+  },
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -83,6 +133,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    flex: 1,
+    paddingRight: spacing.sm,
   },
   swatch: {
     width: 10,
@@ -96,6 +148,7 @@ const styles = StyleSheet.create({
   },
   itemNumbers: {
     alignItems: 'flex-end',
+    flexShrink: 0,
   },
   itemValue: {
     fontFamily: fontFamilies.semibold,

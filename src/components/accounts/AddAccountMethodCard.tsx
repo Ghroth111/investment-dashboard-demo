@@ -20,14 +20,17 @@ export function AddAccountMethodCard({
   onPress,
 }: AddAccountMethodCardProps) {
   return (
-    <Pressable onPress={onPress}>
+    <Pressable onPress={onPress} style={({ pressed }) => [pressed ? styles.pressed : null]}>
       <SurfaceCard style={styles.card}>
         <View style={styles.topRow}>
           <View style={styles.iconWrap}>
             <Ionicons name={icon} size={22} color={colors.primary} />
           </View>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{badge}</Text>
+          <View style={styles.badgeWrap}>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{badge}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
           </View>
         </View>
         <Text style={styles.title}>{title}</Text>
@@ -41,10 +44,18 @@ const styles = StyleSheet.create({
   card: {
     gap: spacing.sm,
   },
+  pressed: {
+    opacity: 0.92,
+  },
   topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  badgeWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   iconWrap: {
     width: 46,

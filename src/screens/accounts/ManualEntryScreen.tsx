@@ -164,7 +164,7 @@ function HoldingEditorCard({
       } catch (error) {
         if (!cancelled) {
           setSearchResults([]);
-          setSearchError(error instanceof Error ? error.message : '搜索失败，请检查后端服务。');
+          setSearchError(error instanceof Error ? error.message : '搜索失败，请稍后重试。');
         }
       } finally {
         if (!cancelled) {
@@ -182,7 +182,7 @@ function HoldingEditorCard({
   async function refreshPrice(overrides?: Partial<StockSearchResult>) {
     const symbol = overrides?.symbol || holding.symbol;
     if (!symbol) {
-      Alert.alert('请选择标的', '请先通过上方搜索结果选择一个真实美股标的。');
+      Alert.alert('请选择标的', '请先通过搜索结果选择一个真实标的，再刷新最新价格。');
       return;
     }
 
@@ -206,7 +206,7 @@ function HoldingEditorCard({
         instrumentType: overrides?.instrumentType || holding.instrumentType,
       });
     } catch (error) {
-      setPriceError(error instanceof Error ? error.message : '获取现价失败');
+      setPriceError(error instanceof Error ? error.message : '获取最新价格失败。');
     } finally {
       setPriceLoading(false);
     }
@@ -257,7 +257,9 @@ function HoldingEditorCard({
           autoCapitalize="none"
           autoCorrect={false}
         />
-        <Text style={styles.searchHint}>匹配结果来自 Twelve Data，选择后会自动带入名称、代码和真实现价。</Text>
+        <Text style={styles.searchHint}>
+          匹配结果来自 Twelve Data，选中后会自动带入名称、代码和最新价格。
+        </Text>
         {searchLoading ? (
           <View style={styles.inlineStatus}>
             <ActivityIndicator size="small" color={colors.primary} />
@@ -295,10 +297,11 @@ function HoldingEditorCard({
         placeholder="例如 Apple Inc."
       />
       <InputField
-        label="Symbol"
+        label="代码"
         value={holding.symbol}
         onChangeText={(text) => onChange({ symbol: text.trim().toUpperCase() })}
         placeholder="例如 AAPL"
+        autoCapitalize="characters"
       />
       <View style={styles.optionBlock}>
         <Text style={styles.optionLabel}>资产类型</Text>
@@ -318,7 +321,7 @@ function HoldingEditorCard({
       />
 
       <View style={styles.priceHeader}>
-        <Text style={styles.optionLabel}>当前价</Text>
+        <Text style={styles.optionLabel}>当前价格</Text>
         <Pressable
           onPress={() => {
             void refreshPrice();
@@ -332,20 +335,19 @@ function HoldingEditorCard({
             <Ionicons name="refresh-outline" size={14} color={holding.symbol ? colors.info : colors.textMuted} />
           )}
           <Text style={[styles.refreshPriceText, !holding.symbol ? styles.disabledText : null]}>
-            刷新现价
+            刷新价格
           </Text>
         </Pressable>
       </View>
       <InputField
-        label="实时现价"
+        label="最新价格"
         value={holding.currentPrice}
         onChangeText={(text) => onChange({ currentPrice: text })}
         keyboardType="decimal-pad"
-        placeholder="选择标的后自动带入，也可手动填写"
-        editable
+        placeholder="选择标的后自动带入，也可以手动填写"
       />
       <Text style={styles.priceHint}>
-        现价会优先由 Twelve Data 自动带入；如果接口暂时不可用，也可以手动填写后保存。
+        如果价格接口暂时不可用，你也可以手动填写最新价格后继续保存。
       </Text>
       {priceError ? <Text style={styles.errorText}>{priceError}</Text> : null}
 
@@ -410,7 +412,7 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
 
     if (!accountName.trim() || !platformName.trim()) {
       setSaveMessage('请先填写账户名称和平台名称。');
-      Alert.alert('字段不完整', '请至少填写账户名称和平台名称。');
+      Alert.alert('信息不完整', '请至少填写账户名称和平台名称。');
       return;
     }
 
@@ -428,8 +430,8 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
         Number.isNaN(currentPrice) ||
         Number.isNaN(costBasis)
       ) {
-        setSaveMessage(`持仓 #${parsedHoldings.length + 1} 信息不完整，请补全名称、代码、数量、现价和成本价。`);
-        Alert.alert('持仓数据不完整', '请补全每条持仓的名称、代码、数量、现价和成本。');
+        setSaveMessage(`持仓 #${parsedHoldings.length + 1} 信息不完整，请补全名称、代码、数量、价格和成本价。`);
+        Alert.alert('持仓信息不完整', '请补全每条持仓的名称、代码、数量、最新价格和成本价。');
         return;
       }
 
@@ -457,10 +459,10 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
 
       navigation.replace('AccountDetail', { accountId });
     } catch (error) {
-      setSaveMessage(error instanceof Error ? `保存失败：${error.message}` : '保存失败，请检查后端服务。');
+      setSaveMessage(error instanceof Error ? `保存失败：${error.message}` : '保存失败，请检查网络后重试。');
       Alert.alert(
         '保存失败',
-        error instanceof Error ? error.message : '账户保存失败，请检查后端服务。',
+        error instanceof Error ? error.message : '账户保存失败，请检查网络后重试。',
       );
     } finally {
       setSaving(false);
@@ -476,7 +478,9 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
         <View style={styles.headerCopy}>
           <Text style={styles.title}>手动录入</Text>
           <Text style={styles.description}>
-            {prefill ? '截图识别结果已经预填，你可以继续删改后再保存。' : '现在可以先搜美股标的，再自动带入真实现价。'}
+            {prefill
+              ? '截图识别结果已经预填，你可以继续校对后再保存。'
+              : '适合线下资产、家庭账户或暂时无法直连的平台。'}
           </Text>
         </View>
       </View>
@@ -487,13 +491,13 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
           label="账户名称"
           value={accountName}
           onChangeText={setAccountName}
-          placeholder="例如：退休组合 / 私募跟踪账户"
+          placeholder="例如：退休组合 / 家庭备用金"
         />
         <InputField
           label="平台名称"
           value={platformName}
           onChangeText={setPlatformName}
-          placeholder="例如：Manual Ledger / 家族办公室"
+          placeholder="例如：Manual Ledger / Family Office"
         />
         <View style={styles.optionBlock}>
           <Text style={styles.optionLabel}>账户类型</Text>
@@ -505,7 +509,7 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
           />
         </View>
         <View style={styles.optionBlock}>
-          <Text style={styles.optionLabel}>币种</Text>
+          <Text style={styles.optionLabel}>计价币种</Text>
           <SegmentedControl
             options={currencyOptions}
             value={currency}
@@ -539,14 +543,14 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
         <Text style={styles.sectionTitle}>预估结果</Text>
         <Text style={styles.summaryValue}>{formatCurrency(previewTotal, currency, 0)}</Text>
         <Text style={styles.summaryText}>
-          保存后会立即出现在首页、账户列表和详情页，持仓数量也会同步展示。
+          保存后，账户会立即出现在首页和账户列表中，持仓也会同步计入资产分布。
         </Text>
         {saveMessage ? <Text style={styles.saveMessage}>{saveMessage}</Text> : null}
         <Pressable
           disabled={saving}
           onPressIn={() => {
             if (!saving) {
-              setSaveMessage('按钮已点击，准备保存...');
+              setSaveMessage('准备保存账户...');
             }
           }}
           onPress={() => {

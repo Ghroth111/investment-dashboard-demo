@@ -1,45 +1,473 @@
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  LayoutAnimation,
+  PanResponder,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  UIManager,
+  View,
+  useWindowDimensions,
+  type GestureResponderEvent,
+} from 'react-native';
+import Svg, {
+  Circle,
+  Defs,
+  LinearGradient as SvgLinearGradient,
+  Line,
+  Path,
+  Stop,
+} from 'react-native-svg';
 
+import { convertAmount, getAccountMetrics } from '../../features/dashboard/selectors';
+import { buildAccountsPerformanceSeries } from '../../features/performance/series';
 import { colors, fontFamilies, radius, spacing } from '../../theme';
-import type { CurrencyCode, DashboardSummary, TrendPoint } from '../../types/models';
+import type {
+  Account,
+  AccountType,
+  CurrencyCode,
+  ExchangeRates,
+  PerformancePoint,
+  PerformanceRange,
+  PerformanceSeries,
+} from '../../types/models';
 import {
   formatCurrency,
   formatDateTime,
   formatPercent,
   formatSignedCurrency,
 } from '../../utils/formatters';
-import { Sparkline } from '../chart/Sparkline';
 
-type SummaryRange = '1D' | '7D' | '30D' | '1Y';
-
-interface AssetSummaryCardProps {
-  summary: DashboardSummary;
-  currency: CurrencyCode;
-  trendSeries: Record<SummaryRange, TrendPoint[]>;
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const rangeMeta: Record<SummaryRange, { label: string; shortLabel: string }> = {
-  '1D': { label: '今日', shortLabel: '今日' },
-  '7D': { label: '近 7 日', shortLabel: '7日' },
-  '30D': { label: '近 30 日', shortLabel: '30日' },
-  '1Y': { label: '近 1 年', shortLabel: '1年' },
+type SegmentKey = 'overview' | AccountType;
+
+interface AssetSummaryCardProps {
+  accounts: Account[];
+  currency: CurrencyCode;
+  exchangeRates: ExchangeRates;
+  onAnalyticsPress: () => void;
+}
+
+interface CategorySegment {
+  key: SegmentKey;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  accentColor: string;
+  totalAssets: number;
+  cumulativeReturn: number;
+  cumulativeReturnRate: number;
+  todayChange: number;
+  lastUpdated: string;
+  series: PerformanceSeries;
+}
+
+interface AnimatedMetrics {
+  totalAssets: number;
+  cumulativeReturn: number;
+  cumulativeReturnRate: number;
+  todayChange: number;
+  rangeChange: number;
+  rangeChangeRate: number;
+}
+
+const chartHeight = 224;
+const chartInsetX = 8;
+const chartInsetTop = 10;
+const chartInsetBottom = 20;
+
+const rangeOptions: Array<{ value: PerformanceRange; label: string; summaryLabel: string }> = [
+  { value: '7D', label: '7D', summaryLabel: '近 7 日收益' },
+  { value: '1M', label: '1M', summaryLabel: '近 1 月收益' },
+  { value: '6M', label: '6M', summaryLabel: '近 6 月收益' },
+  { value: 'YTD', label: 'YTD', summaryLabel: '年初至今收益' },
+  { value: '1Y', label: '1Y', summaryLabel: '近 1 年收益' },
+  { value: 'ALL', label: 'ALL', summaryLabel: '全部周期收益' },
+];
+
+const categoryMeta: Record<
+  SegmentKey,
+  {
+    label: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    accentColor: string;
+  }
+> = {
+  overview: { label: '总览', icon: 'grid-outline', accentColor: '#7DE6D8' },
+  Brokerage: { label: '券商', icon: 'stats-chart-outline', accentColor: '#89D5FF' },
+  Fund: { label: '基金', icon: 'pie-chart-outline', accentColor: '#A4E7C2' },
+  Crypto: { label: '加密', icon: 'logo-bitcoin', accentColor: '#70D4FF' },
+  Cash: { label: '现金', icon: 'wallet-outline', accentColor: '#B0E7D4' },
+  Manual: { label: '手动', icon: 'create-outline', accentColor: '#B5CFF1' },
 };
 
-export function AssetSummaryCard({
-  summary,
-  currency,
-  trendSeries,
-}: AssetSummaryCardProps) {
-  const [range, setRange] = useState<SummaryRange>('7D');
-  const [menuVisible, setMenuVisible] = useState(false);
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
 
-  const chartPoints = useMemo(() => trendSeries[range] ?? [], [range, trendSeries]);
+function formatSummaryDate(timestamp: string, range: PerformanceRange) {
+  const date = new Date(timestamp);
+
+  if (range === '7D') {
+    return new Intl.DateTimeFormat('zh-CN', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  }
+
+  if (range === 'ALL') {
+    return new Intl.DateTimeFormat('zh-CN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }).format(date);
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
+}
+
+function getAggregateMetrics(
+  accounts: Account[],
+  baseCurrency: CurrencyCode,
+  rates: ExchangeRates,
+) {
+  return accounts.reduce(
+    (accumulator, account) => {
+      const metrics = getAccountMetrics(account);
+
+      accumulator.totalAssets += convertAmount(
+        metrics.totalValue,
+        account.currency,
+        baseCurrency,
+        rates,
+      );
+      accumulator.cumulativeReturn += convertAmount(
+        metrics.cumulativeReturn,
+        account.currency,
+        baseCurrency,
+        rates,
+      );
+      accumulator.costBase += convertAmount(
+        metrics.totalValue - metrics.cumulativeReturn,
+        account.currency,
+        baseCurrency,
+        rates,
+      );
+      accumulator.todayChange += convertAmount(
+        metrics.todayChange,
+        account.currency,
+        baseCurrency,
+        rates,
+      );
+      accumulator.lastUpdated =
+        new Date(account.updatedAt) > new Date(accumulator.lastUpdated)
+          ? account.updatedAt
+          : accumulator.lastUpdated;
+
+      return accumulator;
+    },
+    {
+      totalAssets: 0,
+      cumulativeReturn: 0,
+      costBase: 0,
+      todayChange: 0,
+      lastUpdated: accounts[0]?.updatedAt ?? new Date().toISOString(),
+    },
+  );
+}
+
+function buildCategorySegments(
+  accounts: Account[],
+  currency: CurrencyCode,
+  exchangeRates: ExchangeRates,
+) {
+  const groupedAccounts = accounts.reduce<Record<AccountType, Account[]>>(
+    (accumulator, account) => {
+      accumulator[account.type] = [...(accumulator[account.type] ?? []), account];
+      return accumulator;
+    },
+    {
+      Brokerage: [],
+      Fund: [],
+      Crypto: [],
+      Cash: [],
+      Manual: [],
+    },
+  );
+
+  const overviewMetrics = getAggregateMetrics(accounts, currency, exchangeRates);
+  const orderedTypes: AccountType[] = ['Brokerage', 'Fund', 'Crypto', 'Cash', 'Manual'];
+
+  const segments: CategorySegment[] = [
+    {
+      key: 'overview',
+      ...categoryMeta.overview,
+      totalAssets: overviewMetrics.totalAssets,
+      cumulativeReturn: overviewMetrics.cumulativeReturn,
+      cumulativeReturnRate:
+        overviewMetrics.costBase === 0
+          ? 0
+          : overviewMetrics.cumulativeReturn / overviewMetrics.costBase,
+      todayChange: overviewMetrics.todayChange,
+      lastUpdated: overviewMetrics.lastUpdated,
+      series: buildAccountsPerformanceSeries(accounts, currency, exchangeRates, 'overview'),
+    },
+  ];
+
+  orderedTypes.forEach((type) => {
+    const bucket = groupedAccounts[type];
+    if (!bucket.length) {
+      return;
+    }
+
+    const metrics = getAggregateMetrics(bucket, currency, exchangeRates);
+
+    segments.push({
+      key: type,
+      ...categoryMeta[type],
+      totalAssets: metrics.totalAssets,
+      cumulativeReturn: metrics.cumulativeReturn,
+      cumulativeReturnRate: metrics.costBase === 0 ? 0 : metrics.cumulativeReturn / metrics.costBase,
+      todayChange: metrics.todayChange,
+      lastUpdated: metrics.lastUpdated,
+      series: buildAccountsPerformanceSeries(bucket, currency, exchangeRates, type),
+    });
+  });
+
+  return segments;
+}
+
+function getRangeChange(points: PerformancePoint[]) {
+  const firstPoint = points[0];
+  const lastPoint = points.at(-1);
+
+  if (!firstPoint || !lastPoint) {
+    return { amount: 0, rate: 0 };
+  }
+
+  const amount = lastPoint.value - firstPoint.value;
+
+  return {
+    amount,
+    rate: firstPoint.value === 0 ? 0 : amount / firstPoint.value,
+  };
+}
+
+export function AssetSummaryCard({
+  accounts,
+  currency,
+  exchangeRates,
+  onAnalyticsPress,
+}: AssetSummaryCardProps) {
+  const { width } = useWindowDimensions();
+  const [range, setRange] = useState<PerformanceRange>('YTD');
+  const [activeSegmentKey, setActiveSegmentKey] = useState<SegmentKey>('overview');
+  const [scrubbing, setScrubbing] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [chartWidth, setChartWidth] = useState(0);
+  const [animatedMetrics, setAnimatedMetrics] = useState<AnimatedMetrics>({
+    totalAssets: 0,
+    cumulativeReturn: 0,
+    cumulativeReturnRate: 0,
+    todayChange: 0,
+    rangeChange: 0,
+    rangeChangeRate: 0,
+  });
+  const revealProgress = useRef(new Animated.Value(1)).current;
+  const countUpProgress = useRef(new Animated.Value(0)).current;
+
+  const segments = useMemo(
+    () => buildCategorySegments(accounts, currency, exchangeRates),
+    [accounts, currency, exchangeRates],
+  );
+  const activeSegment =
+    segments.find((segment) => segment.key === activeSegmentKey) ?? segments[0] ?? null;
+  const points = activeSegment?.series[range] ?? [];
+  const lastPoint = points.at(-1) ?? null;
+  const rangeChange = useMemo(() => getRangeChange(points), [points]);
+
+  useEffect(() => {
+    setActiveIndex(Math.max(points.length - 1, 0));
+    setScrubbing(false);
+  }, [points.length, range]);
+
+  useEffect(() => {
+    if (!activeSegment || !lastPoint) {
+      return;
+    }
+
+    const listenerId = countUpProgress.addListener(({ value }) => {
+      setAnimatedMetrics({
+        totalAssets: lastPoint.value * value,
+        cumulativeReturn: lastPoint.gain * value,
+        cumulativeReturnRate: lastPoint.gainRate * value,
+        todayChange: activeSegment.todayChange * value,
+        rangeChange: rangeChange.amount * value,
+        rangeChangeRate: rangeChange.rate * value,
+      });
+    });
+
+    countUpProgress.stopAnimation();
+    countUpProgress.setValue(0);
+    revealProgress.stopAnimation();
+    revealProgress.setValue(0);
+
+    Animated.parallel([
+      Animated.timing(countUpProgress, {
+        toValue: 1,
+        duration: 720,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }),
+      Animated.timing(revealProgress, {
+        toValue: 1,
+        duration: 640,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }),
+    ]).start();
+
+    return () => {
+      countUpProgress.removeListener(listenerId);
+    };
+  }, [activeSegment, countUpProgress, lastPoint, rangeChange, revealProgress]);
+
+  const normalized = useMemo(() => {
+    if (!chartWidth || points.length === 0) {
+      return [];
+    }
+
+    const min = Math.min(...points.map((point) => point.value));
+    const max = Math.max(...points.map((point) => point.value));
+    const drawableWidth = Math.max(chartWidth - chartInsetX * 2, 1);
+    const drawableHeight = chartHeight - chartInsetTop - chartInsetBottom;
+
+    return points.map((point, index) => {
+      const progress = points.length === 1 ? 1 : index / (points.length - 1);
+      const x = chartInsetX + drawableWidth * progress;
+      const y =
+        chartHeight -
+        chartInsetBottom -
+        ((point.value - min) / Math.max(max - min, 1)) * drawableHeight;
+
+      return {
+        ...point,
+        x,
+        y,
+      };
+    });
+  }, [chartWidth, points]);
+
+  const linePath = useMemo(() => {
+    if (normalized.length === 0) {
+      return '';
+    }
+
+    return normalized
+      .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+      .join(' ');
+  }, [normalized]);
+
+  const areaPath = useMemo(() => {
+    if (normalized.length === 0) {
+      return '';
+    }
+
+    return `${linePath} L ${normalized[normalized.length - 1].x} ${chartHeight - chartInsetBottom} L ${
+      normalized[0].x
+    } ${chartHeight - chartInsetBottom} Z`;
+  }, [linePath, normalized]);
+
+  const displayedIndex = Math.min(activeIndex, Math.max(normalized.length - 1, 0));
+  const activeCoordinates = normalized[displayedIndex];
+  const activePoint = points[displayedIndex] ?? lastPoint;
+  const activeRangeMeta =
+    rangeOptions.find((option) => option.value === range) ?? rangeOptions[0];
+  const animatedChartWidth = revealProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, chartWidth || Math.max(width - 92, 248)],
+  });
+  const floatingDateWidth = 136;
+  const floatingDateLeft = activeCoordinates
+    ? clamp(activeCoordinates.x - floatingDateWidth / 2, 0, Math.max(chartWidth - floatingDateWidth, 0))
+    : 0;
+
+  function updateActiveIndex(event: GestureResponderEvent) {
+    if (!normalized.length || chartWidth <= 0) {
+      return;
+    }
+
+    const locationX = event.nativeEvent.locationX;
+    const nextIndex = Math.round(
+      ((locationX - chartInsetX) / Math.max(chartWidth - chartInsetX * 2, 1)) * (normalized.length - 1),
+    );
+
+    setActiveIndex(Math.max(0, Math.min(normalized.length - 1, nextIndex)));
+  }
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (event) => {
+          setScrubbing(true);
+          updateActiveIndex(event);
+        },
+        onPanResponderMove: (event) => {
+          updateActiveIndex(event);
+        },
+        onPanResponderRelease: () => {
+          setScrubbing(false);
+          setActiveIndex(Math.max(points.length - 1, 0));
+        },
+        onPanResponderTerminate: () => {
+          setScrubbing(false);
+          setActiveIndex(Math.max(points.length - 1, 0));
+        },
+      }),
+    [chartWidth, normalized.length, points.length],
+  );
+
+  const handleSegmentChange = (nextKey: SegmentKey) => {
+    if (nextKey === activeSegmentKey) {
+      return;
+    }
+
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setActiveSegmentKey(nextKey);
+  };
+
+  if (!activeSegment || !activePoint) {
+    return null;
+  }
+
+  const displayedValue = scrubbing ? activePoint.value : animatedMetrics.totalAssets;
+  const displayedCumulative = scrubbing ? activePoint.gain : animatedMetrics.cumulativeReturn;
+  const displayedCumulativeRate = scrubbing
+    ? activePoint.gainRate
+    : animatedMetrics.cumulativeReturnRate;
+  const primaryChange = scrubbing ? activePoint.gain : animatedMetrics.rangeChange;
+  const primaryChangeRate = scrubbing ? activePoint.gainRate : animatedMetrics.rangeChangeRate;
+  const primaryLabel = scrubbing ? '持有收益' : activeRangeMeta.summaryLabel;
 
   return (
     <LinearGradient
-      colors={['#0E2948', '#1E4567']}
+      colors={['#0E2948', '#173959', '#20486B']}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.card}
@@ -47,69 +475,185 @@ export function AssetSummaryCard({
       <View style={styles.topRow}>
         <View style={styles.summaryBlock}>
           <Text style={styles.eyebrow}>总资产</Text>
-          <Text style={styles.value}>{formatCurrency(summary.totalAssets, currency, 0)}</Text>
-        </View>
-
-        <View style={styles.chartBlock}>
-          <Pressable onPress={() => setMenuVisible((visible) => !visible)} style={styles.rangeTrigger}>
-            <Text style={styles.rangeTriggerText}>{rangeMeta[range].label}</Text>
-          </Pressable>
-
-          <View style={styles.sparklineWrap}>
-            <Sparkline points={chartPoints} width={152} height={64} strokeColor="#9BE4BF" />
+          <Text style={styles.value}>{formatCurrency(displayedValue, currency, 0)}</Text>
+          <View style={styles.performanceRow}>
+            <Text style={[styles.performanceValue, primaryChange >= 0 ? styles.positive : styles.negative]}>
+              {formatSignedCurrency(primaryChange, currency, 0)} ({formatPercent(primaryChangeRate)})
+            </Text>
+            <Text style={styles.performanceLabel}>{primaryLabel}</Text>
           </View>
-
-          {menuVisible ? (
-            <View style={styles.menu}>
-              {(Object.keys(rangeMeta) as SummaryRange[]).map((option) => (
-                <Pressable
-                  key={option}
-                  onPress={() => {
-                    setRange(option);
-                    setMenuVisible(false);
-                  }}
-                  style={[styles.menuItem, option === range ? styles.menuItemActive : null]}
-                >
-                  <Text style={[styles.menuText, option === range ? styles.menuTextActive : null]}>
-                    {rangeMeta[option].shortLabel}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
+          <View style={styles.performanceRow}>
+            <Text
+              style={[
+                styles.performanceValue,
+                animatedMetrics.todayChange >= 0 ? styles.positive : styles.negative,
+              ]}
+            >
+              {formatSignedCurrency(animatedMetrics.todayChange, currency, 0)}
+            </Text>
+            <Text style={styles.performanceLabel}>今日盈亏</Text>
+          </View>
         </View>
+
+        <Pressable onPress={onAnalyticsPress} style={styles.analyticsButton}>
+          <Ionicons name="pie-chart-outline" size={18} color={colors.white} />
+        </Pressable>
       </View>
 
-      <View style={styles.metricGrid}>
-        <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>今日盈亏</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.segmentTabs}
+      >
+        {segments.map((segment) => {
+          const active = segment.key === activeSegmentKey;
+
+          return (
+            <Pressable
+              key={segment.key}
+              onPress={() => handleSegmentChange(segment.key)}
+              style={[
+                styles.segmentChip,
+                active ? styles.segmentChipActive : null,
+                { borderColor: active ? `${segment.accentColor}66` : 'rgba(255,255,255,0.08)' },
+              ]}
+            >
+              <View
+                style={[
+                  styles.segmentIconWrap,
+                  active ? { backgroundColor: `${segment.accentColor}22` } : null,
+                ]}
+              >
+                <Ionicons
+                  name={segment.icon}
+                  size={16}
+                  color={active ? segment.accentColor : 'rgba(255,255,255,0.72)'}
+                />
+              </View>
+              {active ? <Text style={styles.segmentChipText}>{segment.label}</Text> : null}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <View
+        style={styles.chartWrap}
+        onLayout={(event) => {
+          setChartWidth(event.nativeEvent.layout.width);
+        }}
+        {...panResponder.panHandlers}
+      >
+        {scrubbing && activeCoordinates ? (
+          <View style={[styles.floatingDateBadge, { width: floatingDateWidth, left: floatingDateLeft }]}>
+            <Text style={styles.floatingDateText}>{formatSummaryDate(activePoint.timestamp, range)}</Text>
+          </View>
+        ) : null}
+
+        <Animated.View style={[styles.chartReveal, { width: animatedChartWidth }]}>
+          {chartWidth > 0 && normalized.length > 0 ? (
+            <Svg width={chartWidth} height={chartHeight}>
+              <Defs>
+                <SvgLinearGradient id="summaryAreaFill" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <Stop offset="0%" stopColor={activeSegment.accentColor} stopOpacity={0.34} />
+                  <Stop offset="100%" stopColor={activeSegment.accentColor} stopOpacity={0} />
+                </SvgLinearGradient>
+              </Defs>
+
+              <Path d={areaPath} fill="url(#summaryAreaFill)" />
+              <Path
+                d={linePath}
+                stroke={activeSegment.accentColor}
+                strokeWidth={3.2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+              <Line
+                x1={0}
+                x2={chartWidth}
+                y1={chartHeight - chartInsetBottom}
+                y2={chartHeight - chartInsetBottom}
+                stroke="rgba(255,255,255,0.08)"
+                strokeWidth={1}
+              />
+
+              {activeCoordinates ? (
+                <>
+                  <Line
+                    x1={activeCoordinates.x}
+                    x2={activeCoordinates.x}
+                    y1={14}
+                    y2={chartHeight - chartInsetBottom}
+                    stroke="rgba(255,255,255,0.24)"
+                    strokeWidth={1}
+                    strokeDasharray="4 4"
+                  />
+                  <Circle
+                    cx={activeCoordinates.x}
+                    cy={activeCoordinates.y}
+                    r={7}
+                    fill={`${activeSegment.accentColor}44`}
+                  />
+                  <Circle
+                    cx={activeCoordinates.x}
+                    cy={activeCoordinates.y}
+                    r={4.5}
+                    fill={activeSegment.accentColor}
+                  />
+                </>
+              ) : null}
+            </Svg>
+          ) : null}
+        </Animated.View>
+
+        {!scrubbing ? <Text style={styles.dragHint}>按住图表左右拖动，可查看精确日期与金额</Text> : null}
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.rangeTabs}
+      >
+        {rangeOptions.map((option) => {
+          const active = option.value === range;
+
+          return (
+            <Pressable
+              key={option.value}
+              onPress={() => setRange(option.value)}
+              style={[
+                styles.rangeChip,
+                active ? styles.rangeChipActive : null,
+                active ? { borderColor: `${activeSegment.accentColor}77` } : null,
+              ]}
+            >
+              <Text style={[styles.rangeChipText, active ? styles.rangeChipTextActive : null]}>
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <View style={styles.footerMetrics}>
+        <View style={styles.footerMetric}>
+          <Text style={styles.footerMetricLabel}>累计收益</Text>
           <Text
             style={[
-              styles.metricValue,
-              summary.todayChange >= 0 ? styles.positive : styles.negative,
+              styles.footerMetricValue,
+              displayedCumulative >= 0 ? styles.positive : styles.negative,
             ]}
           >
-            {formatSignedCurrency(summary.todayChange, currency, 0)}
+            {formatSignedCurrency(displayedCumulative, currency, 0)}
           </Text>
         </View>
-        <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>累计收益</Text>
-          <Text
-            style={[
-              styles.metricValue,
-              summary.cumulativeReturn >= 0 ? styles.positive : styles.negative,
-            ]}
-          >
-            {formatSignedCurrency(summary.cumulativeReturn, currency, 0)}
-          </Text>
+        <View style={styles.footerMetric}>
+          <Text style={styles.footerMetricLabel}>收益率</Text>
+          <Text style={styles.footerMetricValue}>{formatPercent(displayedCumulativeRate)}</Text>
         </View>
-        <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>收益率</Text>
-          <Text style={styles.metricValue}>{formatPercent(summary.cumulativeReturnRate)}</Text>
-        </View>
-        <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>最近更新</Text>
-          <Text style={styles.metricValue}>{formatDateTime(summary.lastUpdated)}</Text>
+        <View style={styles.footerMetric}>
+          <Text style={styles.footerMetricLabel}>最近更新</Text>
+          <Text style={styles.footerMetricValue}>{formatDateTime(activeSegment.lastUpdated)}</Text>
         </View>
       </View>
     </LinearGradient>
@@ -119,103 +663,167 @@ export function AssetSummaryCard({
 const styles = StyleSheet.create({
   card: {
     borderRadius: radius.xl,
-    padding: spacing.xl,
-    gap: spacing.xl,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xl + spacing.xs,
     overflow: 'hidden',
+    gap: spacing.lg,
   },
   topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: spacing.lg,
+    gap: spacing.md,
   },
   summaryBlock: {
     flex: 1,
+    gap: spacing.sm,
   },
   eyebrow: {
     fontFamily: fontFamilies.medium,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.72)',
-    marginBottom: spacing.sm,
+    color: 'rgba(255,255,255,0.70)',
   },
   value: {
     fontFamily: fontFamilies.bold,
     fontSize: 34,
     lineHeight: 40,
+    letterSpacing: -0.8,
     color: colors.white,
-    letterSpacing: -0.6,
   },
-  chartBlock: {
-    width: 160,
-    alignItems: 'flex-end',
-    position: 'relative',
+  performanceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
   },
-  rangeTrigger: {
-    minHeight: 28,
-    paddingHorizontal: spacing.sm,
+  performanceValue: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: 15,
+  },
+  performanceLabel: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.72)',
+  },
+  analyticsButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  segmentTabs: {
+    gap: spacing.sm,
+    paddingRight: spacing.md,
+  },
+  segmentChip: {
+    minHeight: 42,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: 1,
+  },
+  segmentChipActive: {
+    paddingRight: 16,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  segmentIconWrap: {
+    width: 24,
+    height: 24,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    marginBottom: spacing.sm,
   },
-  rangeTriggerText: {
+  segmentChipText: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: 14,
+    color: colors.white,
+  },
+  chartWrap: {
+    minHeight: chartHeight + 36,
+    justifyContent: 'flex-end',
+    paddingTop: 36,
+  },
+  chartReveal: {
+    overflow: 'hidden',
+    minHeight: chartHeight,
+  },
+  floatingDateBadge: {
+    position: 'absolute',
+    top: 0,
+    minHeight: 30,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  floatingDateText: {
     fontFamily: fontFamilies.medium,
     fontSize: 11,
     color: colors.white,
   },
-  sparklineWrap: {
-    width: '100%',
-    height: 68,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  menu: {
+  dragHint: {
     position: 'absolute',
-    top: 34,
+    left: 0,
     right: 0,
-    width: 80,
-    borderRadius: radius.md,
-    padding: spacing.xs,
-    backgroundColor: '#244765',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    zIndex: 10,
-  },
-  menuItem: {
-    minHeight: 32,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuItemActive: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  menuText: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.72)',
-  },
-  menuTextActive: {
-    color: colors.white,
-  },
-  metricGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: spacing.lg,
-  },
-  metricItem: {
-    width: '50%',
-    gap: spacing.xs,
-  },
-  metricLabel: {
+    bottom: 6,
+    textAlign: 'center',
     fontFamily: fontFamilies.regular,
     fontSize: 12,
-    color: 'rgba(255,255,255,0.72)',
+    color: 'rgba(255,255,255,0.62)',
   },
-  metricValue: {
+  rangeTabs: {
+    gap: spacing.sm,
+    paddingRight: spacing.md,
+  },
+  rangeChip: {
+    minHeight: 34,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  rangeChipActive: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  rangeChipText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.68)',
+  },
+  rangeChipTextActive: {
+    color: colors.white,
+  },
+  footerMetrics: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  footerMetric: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  footerMetricLabel: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.65)',
+  },
+  footerMetricValue: {
     fontFamily: fontFamilies.semibold,
-    fontSize: 15,
+    fontSize: 14,
     color: colors.white,
   },
   positive: {

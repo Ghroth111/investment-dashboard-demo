@@ -1,13 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { HoldingRow } from '../../components/accounts/HoldingRow';
+import { InteractivePerformanceChart } from '../../components/chart/InteractivePerformanceChart';
 import { AppScreen } from '../../components/layout/AppScreen';
 import { ErrorState } from '../../components/states/ErrorState';
 import { Button } from '../../components/ui/Button';
 import { SurfaceCard } from '../../components/ui/SurfaceCard';
+import { getHoldingAssetKey } from '../../features/assets/selectors';
 import { convertAmount, getAccountMetrics } from '../../features/dashboard/selectors';
+import { buildAccountPerformanceSeries } from '../../features/performance/series';
+import type { RootStackScreenProps } from '../../navigation/types';
 import { useDemoStore } from '../../store/demoStore';
 import { colors, fontFamilies, spacing } from '../../theme';
 import {
@@ -16,22 +20,40 @@ import {
   formatPercent,
   formatSignedCurrency,
 } from '../../utils/formatters';
-import type { RootStackScreenProps } from '../../navigation/types';
 
-type SyncState = 'idle' | 'syncing' | 'error' | 'success';
+const accountTypeLabels = {
+  Brokerage: 'Brokerage Account',
+  Fund: 'Fund Account',
+  Crypto: 'Crypto Account',
+  Cash: 'Cash Account',
+  Manual: 'Manual Account',
+} as const;
+
+const sourceLabels = {
+  api: 'API Sync',
+  manual: 'Manual Entry',
+  screenshot: 'Screenshot Import',
+  mock: 'Auto Sync',
+} as const;
 
 async function confirmDeleteAccount() {
   const browserConfirm = (globalThis as { confirm?: (message?: string) => boolean }).confirm;
 
   if (typeof browserConfirm === 'function') {
-    return browserConfirm('这会从当前账号下的 SQLite 账户数据中移除该账户。是否继续删除？');
+    return browserConfirm(
+      'Deleting this account will remove the account, linked holdings, and related flow records from the current workspace.',
+    );
   }
 
   return new Promise<boolean>((resolve) => {
-    Alert.alert('删除账户', '这会从当前账号下的 SQLite 账户数据中移除该账户。', [
-      { text: '取消', style: 'cancel', onPress: () => resolve(false) },
-      { text: '删除', style: 'destructive', onPress: () => resolve(true) },
-    ]);
+    Alert.alert(
+      'Delete Account',
+      'Deleting this account will remove the account, linked holdings, and related flow records from the current workspace.',
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
+      ],
+    );
   });
 }
 
@@ -43,18 +65,19 @@ export function AccountDetailScreen({
   const exchangeRates = useDemoStore((state) => state.exchangeRates);
   const accounts = useDemoStore((state) => state.accounts);
   const deleteAccount = useDemoStore((state) => state.deleteAccount);
+  const loadAccounts = useDemoStore((state) => state.loadAccounts);
   const account = accounts.find((item) => item.id === route.params.accountId);
-  const [syncState, setSyncState] = useState<SyncState>('idle');
-  const [firstRefreshShouldFail, setFirstRefreshShouldFail] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [refreshNote, setRefreshNote] = useState('');
 
   if (!account) {
     return (
       <AppScreen>
         <ErrorState
-          title="账户不存在"
-          description="当前账户可能已经被删除，或者 mock 路由参数已失效。"
-          actionLabel="返回账户列表"
+          title="Account not found"
+          description="This account may have been removed or replaced by a newer import."
+          actionLabel="Go Back"
           onAction={() => navigation.goBack()}
         />
       </AppScreen>
@@ -82,6 +105,16 @@ export function AccountDetailScreen({
     user.baseCurrency,
     exchangeRates,
   );
+  const todayChange = convertAmount(
+    metrics.todayChange,
+    currentAccount.currency,
+    user.baseCurrency,
+    exchangeRates,
+  );
+  const performanceSeries = useMemo(
+    () => buildAccountPerformanceSeries(currentAccount, user.baseCurrency, exchangeRates),
+    [currentAccount, exchangeRates, user.baseCurrency],
+  );
 
   async function handleDelete() {
     if (deleting) {
@@ -99,26 +132,32 @@ export function AccountDetailScreen({
       navigation.goBack();
     } catch (error) {
       Alert.alert(
-        '删除失败',
-        error instanceof Error ? error.message : '账户删除失败，请稍后重试。',
+        'Delete Failed',
+        error instanceof Error ? error.message : 'Unable to remove the account right now.',
       );
     } finally {
       setDeleting(false);
     }
   }
 
-  function handleRefresh() {
-    setSyncState('syncing');
+  async function handleRefresh() {
+    if (refreshing) {
+      return;
+    }
 
-    setTimeout(() => {
-      if (firstRefreshShouldFail) {
-        setSyncState('error');
-        setFirstRefreshShouldFail(false);
-        return;
-      }
-
-      setSyncState('success');
-    }, 900);
+    try {
+      setRefreshing(true);
+      setRefreshNote('');
+      await loadAccounts();
+      setRefreshNote(`Last refresh completed at ${formatDateTime(new Date().toISOString())}`);
+    } catch (error) {
+      Alert.alert(
+        'Refresh Failed',
+        error instanceof Error ? error.message : 'Unable to refresh account data right now.',
+      );
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   return (
@@ -128,98 +167,140 @@ export function AccountDetailScreen({
           <Ionicons name="chevron-back" size={20} color={colors.text} />
         </Pressable>
         <View style={styles.headerCopy}>
-          <Text style={styles.platform}>{account.platform}</Text>
+          <Text style={styles.platform}>{currentAccount.platform}</Text>
           <Text style={styles.title}>{currentAccount.name}</Text>
           <Text style={styles.subtitle}>{currentAccount.subtitle}</Text>
         </View>
       </View>
 
-      <SurfaceCard style={styles.heroCard}>
-        <Text style={styles.heroValue}>{formatCurrency(totalValue, user.baseCurrency, 0)}</Text>
-        <View style={styles.heroMetrics}>
-          <View style={styles.heroMetric}>
-            <Text style={styles.heroMetricLabel}>累计收益</Text>
-            <Text style={[styles.heroMetricValue, totalReturn >= 0 ? styles.positive : styles.negative]}>
+      <InteractivePerformanceChart
+        title="Holding Performance"
+        subtitle={`${currentAccount.platform} · ${currentAccount.subtitle}`}
+        currency={user.baseCurrency}
+        series={performanceSeries}
+        defaultRange="YTD"
+      />
+
+      <SurfaceCard style={styles.card}>
+        <Text style={styles.sectionTitle}>Performance Overview</Text>
+        <View style={styles.metricsGrid}>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Account Value</Text>
+            <Text style={styles.metricValue}>{formatCurrency(totalValue, user.baseCurrency, 0)}</Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Total Return</Text>
+            <Text style={[styles.metricValue, totalReturn >= 0 ? styles.positive : styles.negative]}>
               {formatSignedCurrency(totalReturn, user.baseCurrency, 0)}
             </Text>
           </View>
-          <View style={styles.heroMetric}>
-            <Text style={styles.heroMetricLabel}>收益率</Text>
-            <Text style={styles.heroMetricValue}>{formatPercent(metrics.cumulativeReturnRate)}</Text>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Today P/L</Text>
+            <Text style={[styles.metricValue, todayChange >= 0 ? styles.positive : styles.negative]}>
+              {formatSignedCurrency(todayChange, user.baseCurrency, 0)}
+            </Text>
           </View>
-          <View style={styles.heroMetric}>
-            <Text style={styles.heroMetricLabel}>现金余额</Text>
-            <Text style={styles.heroMetricValue}>{formatCurrency(cashBalance, user.baseCurrency, 0)}</Text>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Return Rate</Text>
+            <Text style={styles.metricValue}>{formatPercent(metrics.cumulativeReturnRate)}</Text>
           </View>
-          <View style={styles.heroMetric}>
-            <Text style={styles.heroMetricLabel}>最近更新</Text>
-            <Text style={styles.heroMetricValue}>{formatDateTime(currentAccount.updatedAt)}</Text>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Cash Balance</Text>
+            <Text style={styles.metricValue}>{formatCurrency(cashBalance, user.baseCurrency, 0)}</Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Updated</Text>
+            <Text style={styles.metricValue}>{formatDateTime(currentAccount.updatedAt)}</Text>
           </View>
         </View>
       </SurfaceCard>
 
+      <SurfaceCard style={styles.card}>
+        <Text style={styles.sectionTitle}>Holdings</Text>
+        <Text style={styles.sectionDescription}>
+          Layout stays fully in English here so we can keep tuning spacing and alignment.
+        </Text>
+        {currentAccount.holdings.length === 0 ? (
+          <Text style={styles.emptyText}>No holdings in this account yet.</Text>
+        ) : (
+          currentAccount.holdings.map((holding) => (
+            <HoldingRow
+              key={holding.id}
+              holding={holding}
+              baseCurrency={user.baseCurrency}
+              exchangeRates={exchangeRates}
+              onPress={() =>
+                navigation.navigate('AssetDetail', {
+                  accountId: currentAccount.id,
+                  holdingId: holding.id,
+                  assetKey: getHoldingAssetKey(holding),
+                })
+              }
+            />
+          ))
+        )}
+      </SurfaceCard>
+
       <SurfaceCard style={styles.actionCard}>
-        <Text style={styles.sectionTitle}>账户操作</Text>
+        <Text style={styles.sectionTitle}>Account Actions</Text>
         <View style={styles.actionButtons}>
           <Button
-            label="编辑账户"
-            onPress={() =>
-              Alert.alert('编辑账户', '当前首轮 Demo 仅保留按钮位置，后续阶段再接编辑表单。')
-            }
+            label={refreshing ? 'Refreshing...' : 'Refresh Data'}
+            onPress={() => {
+              void handleRefresh();
+            }}
             variant="secondary"
+            icon="refresh-outline"
             style={styles.actionButton}
+            disabled={refreshing}
           />
           <Button
-            label={syncState === 'syncing' ? '刷新中...' : '刷新数据'}
-            onPress={handleRefresh}
+            label="Add Transaction"
+            onPress={() => navigation.navigate('AddTransaction')}
             variant="ghost"
+            icon="receipt-outline"
             style={styles.actionButton}
-            disabled={syncState === 'syncing'}
           />
           <Button
-            label={deleting ? '删除中...' : '删除账户'}
+            label={deleting ? 'Deleting...' : 'Delete Account'}
             onPress={() => {
               void handleDelete();
             }}
             variant="danger"
+            icon="trash-outline"
             style={styles.actionButton}
             disabled={deleting}
           />
         </View>
 
-        {syncState === 'error' ? (
-          <View style={[styles.syncBanner, styles.syncError]}>
-            <Ionicons name="warning-outline" size={16} color={colors.negative} />
-            <Text style={styles.syncText}>模拟同步失败，正式版这里会展示错误原因与重试策略。</Text>
-          </View>
-        ) : null}
-        {syncState === 'success' ? (
-          <View style={[styles.syncBanner, styles.syncSuccess]}>
+        {refreshNote ? (
+          <View style={styles.refreshBanner}>
             <Ionicons name="checkmark-circle-outline" size={16} color={colors.positive} />
-            <Text style={styles.syncText}>已完成一次刷新，最近同步时间已更新样式验证。</Text>
+            <Text style={styles.refreshText}>{refreshNote}</Text>
           </View>
         ) : null}
       </SurfaceCard>
 
-      <SurfaceCard>
-        <Text style={styles.sectionTitle}>持仓明细</Text>
-        {currentAccount.holdings.map((holding) => (
-          <HoldingRow
-            key={holding.id}
-            holding={holding}
-            baseCurrency={user.baseCurrency}
-            exchangeRates={exchangeRates}
-          />
-        ))}
-      </SurfaceCard>
-
-      <SurfaceCard>
-        <Text style={styles.sectionTitle}>说明</Text>
-        <Text style={styles.noteLine}>
-          数据来源：{currentAccount.sourceType === 'manual' ? '手动录入' : 'Demo 种子数据'}
-        </Text>
-        <Text style={styles.noteLine}>账户币种：{currentAccount.currency}</Text>
-        <Text style={styles.noteLine}>未来可扩展：实时同步状态、接口健康度、编辑账户资料。</Text>
+      <SurfaceCard style={styles.card}>
+        <Text style={styles.sectionTitle}>Account Profile</Text>
+        <View style={styles.metricsGrid}>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Account Type</Text>
+            <Text style={styles.metricValue}>{accountTypeLabels[currentAccount.type]}</Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Data Source</Text>
+            <Text style={styles.metricValue}>{sourceLabels[currentAccount.sourceType]}</Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Pricing Currency</Text>
+            <Text style={styles.metricValue}>{currentAccount.currency}</Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Position Count</Text>
+            <Text style={styles.metricValue}>{currentAccount.holdings.length}</Text>
+          </View>
+        </View>
       </SurfaceCard>
     </AppScreen>
   );
@@ -256,41 +337,11 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: fontFamilies.regular,
     fontSize: 13,
+    lineHeight: 20,
     color: colors.textMuted,
   },
-  heroCard: {
-    gap: spacing.lg,
-  },
-  heroValue: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 30,
-    color: colors.text,
-    letterSpacing: -0.4,
-  },
-  heroMetrics: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: spacing.lg,
-  },
-  heroMetric: {
-    width: '50%',
-    gap: spacing.xs,
-  },
-  heroMetricLabel: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 12,
-    color: colors.textMuted,
-  },
-  heroMetricValue: {
-    fontFamily: fontFamilies.semibold,
-    fontSize: 14,
-    color: colors.text,
-  },
-  positive: {
-    color: colors.positive,
-  },
-  negative: {
-    color: colors.negative,
+  card: {
+    gap: spacing.md,
   },
   actionCard: {
     gap: spacing.md,
@@ -300,37 +351,63 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: colors.text,
   },
+  sectionDescription: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.textMuted,
+  },
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: spacing.lg,
+  },
+  metricItem: {
+    width: '50%',
+    gap: spacing.xs,
+  },
+  metricLabel: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  metricValue: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: 15,
+    color: colors.text,
+  },
   actionButtons: {
     gap: spacing.sm,
   },
   actionButton: {
     width: '100%',
   },
-  syncBanner: {
+  refreshBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     borderRadius: 14,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-  },
-  syncError: {
-    backgroundColor: colors.negativeSoft,
-  },
-  syncSuccess: {
     backgroundColor: colors.positiveSoft,
   },
-  syncText: {
+  refreshText: {
     flex: 1,
     fontFamily: fontFamilies.regular,
     fontSize: 12,
-    color: colors.text,
     lineHeight: 18,
+    color: colors.text,
   },
-  noteLine: {
+  emptyText: {
     fontFamily: fontFamilies.regular,
     fontSize: 14,
     lineHeight: 22,
     color: colors.textMuted,
+  },
+  positive: {
+    color: colors.positive,
+  },
+  negative: {
+    color: colors.negative,
   },
 });

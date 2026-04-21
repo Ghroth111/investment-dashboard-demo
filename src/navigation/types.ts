@@ -9,6 +9,15 @@ export type RootStackParamList = {
   Login: undefined;
   MainTabs: undefined;
   AccountDetail: { accountId: string };
+  AssetDetail:
+    | { assetKey: string; accountId?: string; holdingId?: string }
+    | { accountId: string; holdingId: string; assetKey?: string };
+  EditHoldingTrade: { tradeId: string };
+  DistributionDetail: {
+    kind: 'assetClass' | 'platform';
+    label: string;
+    tone: string;
+  };
   AddAccount: undefined;
   AddTransaction: undefined;
   ApiConnect: undefined;

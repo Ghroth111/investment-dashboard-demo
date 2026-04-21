@@ -1,19 +1,14 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { DistributionBars } from '../../components/chart/DistributionBars';
+import { MergedHoldingListCard } from '../../components/dashboard/MergedHoldingListCard';
 import { AssetSummaryCard } from '../../components/dashboard/AssetSummaryCard';
 import { CompactAccountCard } from '../../components/dashboard/CompactAccountCard';
 import { AppScreen } from '../../components/layout/AppScreen';
 import { EmptyState } from '../../components/states/EmptyState';
 import { Button } from '../../components/ui/Button';
 import { SurfaceCard } from '../../components/ui/SurfaceCard';
-import {
-  convertAmount,
-  getCategoryDistribution,
-  getDashboardSummary,
-  getPlatformDistribution,
-  getTopAccounts,
-} from '../../features/dashboard/selectors';
+import { buildAggregatedAssets, groupAssetsByClass } from '../../features/assets/selectors';
+import { getTopAccounts } from '../../features/dashboard/selectors';
 import type { AppTabScreenProps } from '../../navigation/types';
 import { useDemoStore } from '../../store/demoStore';
 import { fontFamilies, spacing } from '../../theme';
@@ -21,15 +16,14 @@ import { fontFamilies, spacing } from '../../theme';
 export function DashboardScreen({ navigation }: AppTabScreenProps<'Dashboard'>) {
   const user = useDemoStore((state) => state.user);
   const accounts = useDemoStore((state) => state.accounts);
-  const portfolioHistory = useDemoStore((state) => state.portfolioHistory);
   const exchangeRates = useDemoStore((state) => state.exchangeRates);
 
   if (accounts.length === 0) {
     return (
       <AppScreen>
         <EmptyState
-          title="你还没有接入任何账户"
-          description="先添加第一个账户，让首页开始展示统一资产和收益概览。"
+          title="还没有接入任何账户"
+          description="添加第一个投资账户后，这里会开始汇总你的资产、持仓和分析数据。"
           actionLabel="添加账户"
           onAction={() => navigation.navigate('AddAccount')}
         />
@@ -37,44 +31,23 @@ export function DashboardScreen({ navigation }: AppTabScreenProps<'Dashboard'>) 
     );
   }
 
-  const summary = getDashboardSummary(
-    accounts,
-    user.baseCurrency,
-    exchangeRates,
-    portfolioHistory,
-  );
-  const categoryDistribution = getCategoryDistribution(accounts, user.baseCurrency, exchangeRates);
-  const platformDistribution = getPlatformDistribution(accounts, user.baseCurrency, exchangeRates);
   const quickAccounts = getTopAccounts(accounts);
-  const summaryTrendSeries = {
-    '1D': portfolioHistory['1D'].map((point) => ({
-      ...point,
-      valueUsd: convertAmount(point.valueUsd, 'USD', user.baseCurrency, exchangeRates),
-    })),
-    '7D': portfolioHistory['7D'].map((point) => ({
-      ...point,
-      valueUsd: convertAmount(point.valueUsd, 'USD', user.baseCurrency, exchangeRates),
-    })),
-    '30D': portfolioHistory['30D'].map((point) => ({
-      ...point,
-      valueUsd: convertAmount(point.valueUsd, 'USD', user.baseCurrency, exchangeRates),
-    })),
-    '1Y': portfolioHistory['1Y'].map((point) => ({
-      ...point,
-      valueUsd: convertAmount(point.valueUsd, 'USD', user.baseCurrency, exchangeRates),
-    })),
-  };
+  const groupedAssets = groupAssetsByClass(
+    buildAggregatedAssets(accounts, user.baseCurrency, exchangeRates),
+  );
 
   return (
     <AppScreen>
       <AssetSummaryCard
-        summary={summary}
+        accounts={accounts}
         currency={user.baseCurrency}
-        trendSeries={summaryTrendSeries}
+        exchangeRates={exchangeRates}
+        onAnalyticsPress={() => navigation.navigate('Accounts')}
       />
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>账户速览</Text>
+        <Text style={styles.sectionTitle}>重点账户</Text>
+        <Text style={styles.sectionDescription}>保留最常用的账户入口，方便直接进入账户详情。</Text>
       </View>
       <View style={styles.quickGrid}>
         {quickAccounts.map((account) => (
@@ -88,18 +61,10 @@ export function DashboardScreen({ navigation }: AppTabScreenProps<'Dashboard'>) 
         ))}
       </View>
 
-      <DistributionBars
-        title="资产类别分布"
-        subtitle="查看股票、ETF、基金、加密与现金的整体配置。"
-        items={categoryDistribution}
+      <MergedHoldingListCard
+        sections={groupedAssets}
         currency={user.baseCurrency}
-      />
-
-      <DistributionBars
-        title="平台分布"
-        subtitle="查看资产在不同平台和账户之间的分散情况。"
-        items={platformDistribution}
-        currency={user.baseCurrency}
+        onAssetPress={(assetKey) => navigation.navigate('AssetDetail', { assetKey })}
       />
 
       <SurfaceCard style={styles.quickActions}>
@@ -112,14 +77,14 @@ export function DashboardScreen({ navigation }: AppTabScreenProps<'Dashboard'>) 
             style={styles.actionButton}
           />
           <Button
-            label="导入截图"
+            label="截图导入"
             onPress={() => navigation.navigate('ScreenshotImport')}
             icon="scan-outline"
             variant="secondary"
             style={styles.actionButton}
           />
           <Button
-            label="查看交易"
+            label="查看流水"
             onPress={() => navigation.navigate('Transactions')}
             icon="receipt-outline"
             variant="ghost"
@@ -139,6 +104,12 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.semibold,
     fontSize: 18,
     color: '#10233B',
+  },
+  sectionDescription: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#5E6F84',
   },
   quickGrid: {
     flexDirection: 'row',

@@ -33,6 +33,8 @@ export function AppScreen({
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={containerStyle}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
         >
           {children}
         </ScrollView>

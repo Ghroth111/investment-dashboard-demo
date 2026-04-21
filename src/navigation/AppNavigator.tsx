@@ -7,6 +7,9 @@ import { AccountDetailScreen } from '../screens/accounts/AccountDetailScreen';
 import { AccountsScreen } from '../screens/accounts/AccountsScreen';
 import { AddAccountScreen } from '../screens/accounts/AddAccountScreen';
 import { ApiConnectScreen } from '../screens/accounts/ApiConnectScreen';
+import { AssetDetailScreen } from '../screens/accounts/AssetDetailScreen';
+import { DistributionDetailScreen } from '../screens/accounts/DistributionDetailScreen';
+import { EditHoldingTradeScreen } from '../screens/accounts/EditHoldingTradeScreen';
 import { ManualEntryScreen } from '../screens/accounts/ManualEntryScreen';
 import { ScreenshotImportScreen } from '../screens/accounts/ScreenshotImportScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
@@ -70,6 +73,9 @@ export function AppNavigator() {
         <>
           <RootStack.Screen name="MainTabs" component={MainTabs} />
           <RootStack.Screen name="AccountDetail" component={AccountDetailScreen} />
+          <RootStack.Screen name="AssetDetail" component={AssetDetailScreen} />
+          <RootStack.Screen name="EditHoldingTrade" component={EditHoldingTradeScreen} />
+          <RootStack.Screen name="DistributionDetail" component={DistributionDetailScreen} />
           <RootStack.Screen name="AddAccount" component={AddAccountScreen} />
           <RootStack.Screen name="AddTransaction" component={AddTransactionScreen} />
           <RootStack.Screen name="ApiConnect" component={ApiConnectScreen} />
@@ -83,21 +89,21 @@ export function AppNavigator() {
 
 const tabLabels: Record<keyof TabParamList, string> = {
   Dashboard: '首页',
-  Accounts: '账户',
-  Transactions: '交易',
+  Accounts: '分析',
+  Transactions: '流水',
   Settings: '我的',
 };
 
 const activeIcons: Record<keyof TabParamList, keyof typeof Ionicons.glyphMap> = {
   Dashboard: 'grid',
-  Accounts: 'wallet',
+  Accounts: 'pie-chart',
   Transactions: 'receipt',
   Settings: 'person-circle',
 };
 
 const inactiveIcons: Record<keyof TabParamList, keyof typeof Ionicons.glyphMap> = {
   Dashboard: 'grid-outline',
-  Accounts: 'wallet-outline',
+  Accounts: 'pie-chart-outline',
   Transactions: 'receipt-outline',
   Settings: 'person-circle-outline',
 };
@@ -106,7 +112,7 @@ const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: colors.surface,
     borderTopColor: colors.line,
-    height: 72,
+    height: 74,
     paddingTop: 10,
     paddingBottom: 10,
   },

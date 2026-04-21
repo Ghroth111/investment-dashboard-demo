@@ -1,4 +1,11 @@
-import { StyleSheet, Text, TextInput, View, type KeyboardTypeOptions } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type KeyboardTypeOptions,
+  type TextInputProps,
+} from 'react-native';
 
 import { colors, fontFamilies, radius, spacing } from '../../theme';
 
@@ -11,6 +18,9 @@ interface InputFieldProps {
   keyboardType?: KeyboardTypeOptions;
   multiline?: boolean;
   editable?: boolean;
+  autoCapitalize?: TextInputProps['autoCapitalize'];
+  autoCorrect?: boolean;
+  textContentType?: TextInputProps['textContentType'];
 }
 
 export function InputField({
@@ -22,6 +32,9 @@ export function InputField({
   keyboardType,
   multiline,
   editable = true,
+  autoCapitalize = 'sentences',
+  autoCorrect = false,
+  textContentType,
 }: InputFieldProps) {
   return (
     <View style={styles.container}>
@@ -35,6 +48,9 @@ export function InputField({
         keyboardType={keyboardType}
         multiline={multiline}
         editable={editable}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={autoCorrect}
+        textContentType={textContentType}
         style={[styles.input, multiline ? styles.multiline : null]}
       />
     </View>

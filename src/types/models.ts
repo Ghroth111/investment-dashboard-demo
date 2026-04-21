@@ -3,6 +3,8 @@ export type AccountType = 'Brokerage' | 'Fund' | 'Crypto' | 'Cash' | 'Manual';
 export type SourceType = 'api' | 'manual' | 'screenshot' | 'mock';
 export type AssetClass = 'Stock' | 'ETF' | 'Fund' | 'Crypto' | 'Cash';
 export type TrendRange = '1D' | '7D' | '30D' | '90D' | '1Y' | 'YTD' | 'ALL';
+export type PerformanceRange = '7D' | '1M' | '6M' | 'YTD' | '1Y' | 'ALL';
+export type HoldingTradeType = 'buy' | 'sell';
 export type DemoPhase = 'splash' | 'login' | 'app';
 export type TransactionType = 'income' | 'expense' | 'transfer';
 export type TransactionFilter = 'all' | 'income' | 'expense' | 'investment';
@@ -96,12 +98,43 @@ export interface Transaction {
   note: string;
   account: string;
   accountId?: string;
+  holdingId?: string;
+  assetKey?: string;
+  tradeId?: string;
+  tradeType?: HoldingTradeType;
   isAuto: boolean;
 }
 
 export interface TrendPoint {
   label: string;
   valueUsd: number;
+}
+
+export interface PerformancePoint {
+  timestamp: string;
+  value: number;
+  gain: number;
+  gainRate: number;
+}
+
+export type PerformanceSeries = Record<PerformanceRange, PerformancePoint[]>;
+
+export interface HoldingTrade {
+  id: string;
+  assetKey: string;
+  accountId: string;
+  holdingId: string;
+  assetName: string;
+  symbol: string;
+  assetClass: AssetClass;
+  tradeType: HoldingTradeType;
+  quantity: number;
+  price: number;
+  currency: CurrencyCode;
+  executedAt: string;
+  changeRate: number;
+  source: 'manual' | 'sync';
+  transactionId?: string;
 }
 
 export interface DistributionItem {

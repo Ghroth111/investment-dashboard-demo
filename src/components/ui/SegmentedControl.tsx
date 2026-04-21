@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 
 import { colors, fontFamilies, radius, spacing } from '../../theme';
 
@@ -21,7 +21,11 @@ export function SegmentedControl({
   compact = false,
 }: SegmentedControlProps) {
   return (
-    <View style={[styles.wrapper, compact ? styles.compactWrapper : null]}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={[styles.wrapper, compact ? styles.compactWrapper : null]}
+    >
       {options.map((option) => {
         const active = option.value === value;
 
@@ -29,13 +33,17 @@ export function SegmentedControl({
           <Pressable
             key={option.value}
             onPress={() => onChange(option.value)}
-            style={[styles.option, active ? styles.optionActive : null]}
+            style={({ pressed }) => [
+              styles.option,
+              active ? styles.optionActive : null,
+              pressed ? styles.optionPressed : null,
+            ]}
           >
             <Text style={[styles.label, active ? styles.labelActive : null]}>{option.label}</Text>
           </Pressable>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -60,6 +68,9 @@ const styles = StyleSheet.create({
   optionActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
+  },
+  optionPressed: {
+    opacity: 0.92,
   },
   label: {
     fontFamily: fontFamilies.medium,

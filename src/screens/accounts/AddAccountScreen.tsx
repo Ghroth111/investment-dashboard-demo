@@ -4,8 +4,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AddAccountMethodCard } from '../../components/accounts/AddAccountMethodCard';
 import { AppScreen } from '../../components/layout/AppScreen';
 import { SurfaceCard } from '../../components/ui/SurfaceCard';
-import { colors, fontFamilies, spacing } from '../../theme';
 import type { RootStackScreenProps } from '../../navigation/types';
+import { colors, fontFamilies, spacing } from '../../theme';
 
 export function AddAccountScreen({ navigation }: RootStackScreenProps<'AddAccount'>) {
   return (
@@ -16,37 +16,37 @@ export function AddAccountScreen({ navigation }: RootStackScreenProps<'AddAccoun
         </Pressable>
         <View style={styles.headerCopy}>
           <Text style={styles.title}>添加账户</Text>
-          <Text style={styles.description}>验证首发版本的接入入口、流程顺序与字段边界。</Text>
+          <Text style={styles.description}>选择最适合你的接入方式，开始同步或录入资产。</Text>
         </View>
       </View>
 
       <AddAccountMethodCard
         icon="key-outline"
-        title="API 接入"
-        description="展示平台选择、API Key、Secret 等连接入口，但当前阶段不做真实连通。"
-        badge="占位流程"
+        title="API 直连"
+        description="连接券商或交易平台的只读 API，自动同步账户余额、持仓和更新时间。"
+        badge="推荐"
         onPress={() => navigation.navigate('ApiConnect')}
       />
       <AddAccountMethodCard
         icon="scan-outline"
         title="截图导入"
-        description="上传账户截图后，由后端调用千问视觉理解接口识别并直接保存到账户。"
-        badge="已接通"
+        description="上传账户截图，系统会识别持仓并生成可编辑的导入草稿。"
+        badge="智能识别"
         onPress={() => navigation.navigate('ScreenshotImport')}
       />
       <AddAccountMethodCard
         icon="create-outline"
         title="手动录入"
-        description="完整填写账户和持仓后，直接写入前端本地状态，形成真实新增反馈。"
-        badge="可交互"
+        description="适合线下资产、私募份额或暂时无法直连的平台，支持自定义持仓。"
+        badge="快速录入"
         onPress={() => navigation.navigate('ManualEntry')}
       />
 
-      <SurfaceCard style={styles.timelineCard}>
-        <Text style={styles.sectionTitle}>接入路径说明</Text>
-        <Text style={styles.noteLine}>1. 先选择接入方式，再决定是否需要输入平台信息或上传材料。</Text>
-        <Text style={styles.noteLine}>2. 截图导入和手动录入都会真实写入后端并刷新首页资产视图。</Text>
-        <Text style={styles.noteLine}>3. API 接入当前仍是占位流程，不会保存真实凭证。</Text>
+      <SurfaceCard style={styles.noteCard}>
+        <Text style={styles.sectionTitle}>接入建议</Text>
+        <Text style={styles.noteLine}>1. 优先选择只读 API 连接，便于持续同步持仓和现金变动。</Text>
+        <Text style={styles.noteLine}>2. 如果你只有截图，可以先导入草稿，再在手动录入页补齐细节。</Text>
+        <Text style={styles.noteLine}>3. 私募、现金或家庭资产建议使用手动录入，后续也可以继续编辑。</Text>
       </SurfaceCard>
     </AppScreen>
   );
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: colors.textMuted,
   },
-  timelineCard: {
+  noteCard: {
     gap: spacing.sm,
   },
   sectionTitle: {

@@ -13,6 +13,14 @@ interface CompactAccountCardProps {
   onPress: () => void;
 }
 
+const typeLabels: Record<Account['type'], string> = {
+  Brokerage: '券商',
+  Fund: '基金',
+  Crypto: '加密',
+  Cash: '现金',
+  Manual: '手动',
+};
+
 export function CompactAccountCard({
   account,
   baseCurrency,
@@ -24,13 +32,16 @@ export function CompactAccountCard({
   const todayChange = convertAmount(metrics.todayChange, account.currency, baseCurrency, exchangeRates);
 
   return (
-    <Pressable style={styles.pressable} onPress={onPress}>
+    <Pressable
+      style={({ pressed }) => [styles.pressable, pressed ? styles.pressablePressed : null]}
+      onPress={onPress}
+    >
       <SurfaceCard style={styles.card}>
         <View style={styles.header}>
           <Text style={styles.platform} numberOfLines={1}>
             {account.platform}
           </Text>
-          <Text style={styles.type}>{account.type}</Text>
+          <Text style={styles.type}>{typeLabels[account.type]}</Text>
         </View>
         <Text style={styles.name} numberOfLines={1}>
           {account.name}
@@ -47,6 +58,9 @@ export function CompactAccountCard({
 const styles = StyleSheet.create({
   pressable: {
     width: '48.5%',
+  },
+  pressablePressed: {
+    opacity: 0.92,
   },
   card: {
     gap: spacing.sm,

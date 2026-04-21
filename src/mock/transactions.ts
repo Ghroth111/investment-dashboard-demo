@@ -145,7 +145,7 @@ export const mockTransactions: Transaction[] = [
     currency: 'USD',
     date: '2026-04-12T14:00:00.000Z',
     note: 'Move cash into broker account',
-    account: 'HSBC Checking → Global Growth',
+    account: 'HSBC Checking -> Global Growth',
     accountId: 'acct-broker-us',
     isAuto: false,
   },

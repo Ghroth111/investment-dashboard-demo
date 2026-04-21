@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppScreen } from '../../components/layout/AppScreen';
 import { Button } from '../../components/ui/Button';
 import { SurfaceCard } from '../../components/ui/SurfaceCard';
+import type { RootStackScreenProps } from '../../navigation/types';
 import { useDemoStore } from '../../store/demoStore';
 import { colors, fontFamilies, radius, spacing } from '../../theme';
-import type { RootStackScreenProps } from '../../navigation/types';
 import type { ScreenshotImportResult } from '../../types/models';
 
 interface SelectedScreenshot {
@@ -53,7 +53,7 @@ async function pickScreenshotFromBrowser(): Promise<SelectedScreenshot | null> {
 
       if (!ACCEPTED_MIME_TYPES.has(file.type)) {
         cleanup();
-        reject(new Error('仅支持 PNG、JPG、JPEG 和 WEBP 截图。'));
+        reject(new Error('仅支持 PNG、JPG、JPEG 和 WEBP 图片格式。'));
         return;
       }
 
@@ -70,7 +70,7 @@ async function pickScreenshotFromBrowser(): Promise<SelectedScreenshot | null> {
         const markerIndex = result.indexOf(base64Marker);
         if (markerIndex === -1) {
           cleanup();
-          reject(new Error('无法读取截图内容，请重试。'));
+          reject(new Error('无法读取截图内容，请重新选择文件。'));
           return;
         }
 
@@ -85,7 +85,7 @@ async function pickScreenshotFromBrowser(): Promise<SelectedScreenshot | null> {
       };
       reader.onerror = () => {
         cleanup();
-        reject(new Error('读取截图失败，请重试。'));
+        reject(new Error('读取截图失败，请稍后重试。'));
       };
       reader.readAsDataURL(file);
     };
@@ -110,15 +110,15 @@ export function ScreenshotImportScreen({
       const pickedScreenshot = await pickScreenshotFromBrowser();
       if (!pickedScreenshot) {
         setStatusMessage('');
-        Alert.alert('当前环境不支持', '当前端没有可用的文件选择能力，请先使用手动录入。');
+        Alert.alert('当前环境不支持', '当前设备暂不支持直接选择文件，请改用手动录入。');
         return;
       }
 
       setSelectedScreenshot(pickedScreenshot);
       setImportResult(null);
-      setStatusMessage('截图已就绪，可以开始导入。');
+      setStatusMessage('截图已就绪，可以开始识别。');
     } catch (error) {
-      const message = error instanceof Error ? error.message : '选择截图失败，请重试。';
+      const message = error instanceof Error ? error.message : '选择截图失败，请稍后重试。';
       setStatusMessage(message);
       Alert.alert('选择失败', message);
     }
@@ -131,17 +131,17 @@ export function ScreenshotImportScreen({
 
     try {
       setImporting(true);
-      setStatusMessage('正在调用千问识别截图并生成手动录入草稿...');
+      setStatusMessage('正在识别截图并生成账户草稿...');
       const result = await addScreenshotAccount({
         imageBase64: selectedScreenshot.imageBase64,
         mimeType: selectedScreenshot.mimeType,
         fileName: selectedScreenshot.fileName,
       });
       setImportResult(result);
-      setStatusMessage('识别完成，准备跳转到手动录入页。');
+      setStatusMessage('识别完成，正在跳转到手动校对页面。');
       navigation.navigate('ManualEntry', { prefill: result.draft });
     } catch (error) {
-      const message = error instanceof Error ? error.message : '截图导入失败，请检查后端服务。';
+      const message = error instanceof Error ? error.message : '截图导入失败，请检查网络或稍后重试。';
       setStatusMessage(message);
       Alert.alert('导入失败', message);
     } finally {
@@ -157,19 +157,21 @@ export function ScreenshotImportScreen({
         </Pressable>
         <View style={styles.headerCopy}>
           <Text style={styles.title}>截图导入</Text>
-          <Text style={styles.description}>上传账户截图后，由后端调用千问视觉理解接口识别并直接写入账户。</Text>
+          <Text style={styles.description}>上传账户截图后，系统会识别持仓并生成可编辑的账户草稿。</Text>
         </View>
       </View>
 
       <SurfaceCard style={styles.card}>
         <View style={styles.uploadZone}>
           <Ionicons name="images-outline" size={32} color={colors.primary} />
-          <Text style={styles.uploadTitle}>上传券商持仓截图</Text>
-          <Text style={styles.uploadDescription}>当前支持 PNG / JPG / WEBP。建议截图不超过 7MB，优先上传完整账户页。</Text>
+          <Text style={styles.uploadTitle}>上传账户截图</Text>
+          <Text style={styles.uploadDescription}>
+            支持 PNG / JPG / WEBP。建议上传完整账户页，并控制在 7MB 以内。
+          </Text>
         </View>
         <Button label="选择截图" onPress={() => void handlePickScreenshot()} icon="cloud-upload-outline" />
         <Button
-          label={importing ? '导入中...' : '识别并保存账户'}
+          label={importing ? '识别中...' : '识别并生成草稿'}
           onPress={() => {
             void handleImport();
           }}
@@ -189,14 +191,16 @@ export function ScreenshotImportScreen({
           </View>
           <View style={styles.resultRow}>
             <Text style={styles.resultLabel}>大小</Text>
-            <Text style={styles.resultValue}>{(selectedScreenshot.sizeInBytes / 1024 / 1024).toFixed(2)} MB</Text>
+            <Text style={styles.resultValue}>
+              {(selectedScreenshot.sizeInBytes / 1024 / 1024).toFixed(2)} MB
+            </Text>
           </View>
         </SurfaceCard>
       ) : null}
 
       {importResult ? (
         <SurfaceCard style={styles.card}>
-          <Text style={styles.sectionTitle}>导入结果</Text>
+          <Text style={styles.sectionTitle}>识别摘要</Text>
           <View style={styles.resultRow}>
             <Text style={styles.resultLabel}>平台</Text>
             <Text style={styles.resultValue}>{importResult.draft.platform || '-'}</Text>
@@ -210,10 +214,8 @@ export function ScreenshotImportScreen({
             <Text style={styles.resultValue}>{importResult.normalized.currency}</Text>
           </View>
           <View style={styles.resultRow}>
-            <Text style={styles.resultLabel}>写入持仓</Text>
-            <Text style={styles.resultValue}>
-              {importResult.normalized.accepted_positions} 条
-            </Text>
+            <Text style={styles.resultLabel}>识别持仓</Text>
+            <Text style={styles.resultValue}>{importResult.normalized.accepted_positions} 项</Text>
           </View>
           {importResult.warnings.length > 0 ? (
             <View style={styles.warningBox}>
@@ -225,22 +227,18 @@ export function ScreenshotImportScreen({
             </View>
           ) : null}
           <Button
-            label="前往手动录入页"
+            label="前往校对草稿"
             onPress={() => navigation.navigate('ManualEntry', { prefill: importResult.draft })}
             icon="open-outline"
           />
-          <Text style={styles.sectionTitle}>识别 JSON</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <Text style={styles.codeBlock}>{JSON.stringify(importResult.extracted, null, 2)}</Text>
-          </ScrollView>
         </SurfaceCard>
       ) : null}
 
       <SurfaceCard style={styles.card}>
-        <Text style={styles.sectionTitle}>说明</Text>
-        <Text style={styles.noteLine}>后端会把截图转给千问 `qwen3.6-plus` 进行图像理解。</Text>
-        <Text style={styles.noteLine}>识别完成后会自动跳转到手动录入页，方便你继续删改。</Text>
-        <Text style={styles.noteLine}>持仓成本价来自截图，现价会在导入草稿时通过 Twelve Data 拉取。</Text>
+        <Text style={styles.sectionTitle}>导入建议</Text>
+        <Text style={styles.noteLine}>优先上传完整的账户总览页，识别结果会更稳定。</Text>
+        <Text style={styles.noteLine}>识别完成后会进入手动录入页，你可以继续校对名称、数量和成本价。</Text>
+        <Text style={styles.noteLine}>如果截图不完整或信息过多，建议拆分多张上传，或直接改用手动录入。</Text>
         <Button label="改用手动录入" onPress={() => navigation.navigate('ManualEntry')} variant="secondary" />
       </SurfaceCard>
     </AppScreen>
@@ -349,15 +347,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     color: '#8A4B08',
-  },
-  codeBlock: {
-    minWidth: '100%',
-    borderRadius: radius.lg,
-    backgroundColor: '#0E1A2B',
-    color: '#E5EEF9',
-    padding: spacing.md,
-    fontSize: 12,
-    lineHeight: 18,
-    fontFamily: 'monospace',
   },
 });

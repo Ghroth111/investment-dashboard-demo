@@ -30,7 +30,6 @@ export function SplashScreen() {
       </View>
       <Text style={styles.title}>衡策资产</Text>
       <Text style={styles.subtitle}>统一查看你的全部投资资产</Text>
-      <Text style={styles.footnote}>Mock-first front-end product demo</Text>
     </LinearGradient>
   );
 }
@@ -73,14 +72,5 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: 'rgba(255,255,255,0.78)',
     textAlign: 'center',
-  },
-  footnote: {
-    position: 'absolute',
-    bottom: 52,
-    fontFamily: fontFamilies.medium,
-    fontSize: 12,
-    letterSpacing: 1,
-    color: 'rgba(255,255,255,0.5)',
-    textTransform: 'uppercase',
   },
 });

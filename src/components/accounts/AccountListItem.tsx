@@ -38,14 +38,15 @@ export function AccountListItem({
   const todayChange = convertAmount(metrics.todayChange, account.currency, baseCurrency, exchangeRates);
 
   return (
-    <Pressable onPress={onPress}>
+    <Pressable onPress={onPress} style={({ pressed }) => [pressed ? styles.pressed : null]}>
       <SurfaceCard style={styles.card}>
         <View style={styles.header}>
           <View style={styles.headerCopy}>
             <Text style={styles.platform}>{account.platform}</Text>
             <Text style={styles.name}>{account.name}</Text>
             <Text style={styles.subtitle}>
-              {typeLabels[account.type]} · {account.holdings.length} 个持仓 · {account.currency} · {formatDateTime(account.updatedAt)}
+              {typeLabels[account.type]} · {account.holdings.length} 项资产 · {account.currency} ·{' '}
+              {formatDateTime(account.updatedAt)}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
@@ -57,7 +58,7 @@ export function AccountListItem({
             <Text style={styles.metricValue}>{formatCurrency(totalValue, baseCurrency, 0)}</Text>
           </View>
           <View style={styles.metricRight}>
-            <Text style={styles.metricLabel}>今日变化</Text>
+            <Text style={styles.metricLabel}>今日变动</Text>
             <Text style={[styles.metricChange, todayChange >= 0 ? styles.positive : styles.negative]}>
               {formatSignedCurrency(todayChange, baseCurrency, 0)}
             </Text>
@@ -70,6 +71,9 @@ export function AccountListItem({
 }
 
 const styles = StyleSheet.create({
+  pressed: {
+    opacity: 0.92,
+  },
   card: {
     gap: spacing.md,
   },
@@ -95,6 +99,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: fontFamilies.regular,
     fontSize: 12,
+    lineHeight: 18,
     color: colors.textMuted,
   },
   metrics: {

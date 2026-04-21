@@ -137,7 +137,7 @@ export const mockAccounts: Account[] = [
     currency: 'EUR',
     cashBalance: 1800,
     updatedAt: '2026-04-17T19:40:00.000Z',
-    subtitle: '手动现金账户',
+    subtitle: '家庭备用金账户',
     holdings: [
       {
         id: 'holding-eur-cash',

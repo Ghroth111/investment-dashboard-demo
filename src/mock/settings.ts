@@ -11,7 +11,7 @@ export const exchangeRates: ExchangeRates = {
 export const baseCurrencyOptions: CurrencyCode[] = ['USD', 'CNY', 'EUR', 'HKD'];
 
 export const upcomingFeatures = [
-  'Web 端资产同步',
+  'Web 端同步',
   '截图识别导入',
   '自动同步券商',
   '投资与生活账本联动',

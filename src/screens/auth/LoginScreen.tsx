@@ -16,7 +16,7 @@ type AuthMode = 'login' | 'register';
 export function LoginScreen() {
   const authenticate = useDemoStore((state) => state.authenticate);
   const [mode, setMode] = useState<AuthMode>('login');
-  const [name, setName] = useState(demoAuth.name);
+  const [name, setName] = useState('');
   const [email, setEmail] = useState(demoAuth.email);
   const [password, setPassword] = useState(demoAuth.password);
   const [submitting, setSubmitting] = useState(false);
@@ -43,7 +43,7 @@ export function LoginScreen() {
       });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : '认证失败，请检查后端服务或输入内容。';
+        error instanceof Error ? error.message : '认证失败，请检查账户信息后重试。';
       setErrorMessage(message);
       Alert.alert(isRegisterMode ? '注册失败' : '登录失败', message);
     } finally {
@@ -59,30 +59,30 @@ export function LoginScreen() {
         </View>
         <View style={styles.heroCopy}>
           <Text style={styles.brand}>衡策资产</Text>
-          <Text style={styles.heroTitle}>真实账号入口已接入</Text>
+          <Text style={styles.heroTitle}>统一管理你的投资资产</Text>
           <Text style={styles.heroDescription}>
-            现在可以通过后端完成最小注册和登录，再进入投资看板 Demo。
+            登录后即可查看账户、持仓、收益表现和平台分布。
           </Text>
         </View>
         <View style={styles.pillRow}>
           <View style={styles.pill}>
-            <Text style={styles.pillText}>SQLite 用户库</Text>
+            <Text style={styles.pillText}>多账户总览</Text>
           </View>
           <View style={styles.pill}>
-            <Text style={styles.pillText}>JWT 会话</Text>
+            <Text style={styles.pillText}>多币种支持</Text>
           </View>
           <View style={styles.pill}>
-            <Text style={styles.pillText}>Demo 资产已预置</Text>
+            <Text style={styles.pillText}>安全登录</Text>
           </View>
         </View>
       </View>
 
       <SurfaceCard style={styles.formCard}>
-        <Text style={styles.formTitle}>{isRegisterMode ? '创建账号' : '登录账号'}</Text>
+        <Text style={styles.formTitle}>{isRegisterMode ? '创建账户' : '登录账户'}</Text>
         <Text style={styles.formDescription}>
           {isRegisterMode
-            ? '新注册账号默认没有任何资产数据，方便从空白状态开始。'
-            : '默认已填入内置演示账号。登录后会看到现有的 mock 资产和交易数据。'}
+            ? '注册后即可开始添加账户、录入持仓并建立自己的资产视图。'
+            : '继续登录，回到你的投资总览。'}
         </Text>
 
         {isRegisterMode ? (
@@ -91,6 +91,7 @@ export function LoginScreen() {
             value={name}
             onChangeText={setName}
             placeholder="请输入姓名"
+            textContentType="name"
           />
         ) : null}
 
@@ -99,6 +100,9 @@ export function LoginScreen() {
           value={email}
           onChangeText={setEmail}
           placeholder="name@example.com"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          textContentType="emailAddress"
         />
         <InputField
           label="密码"
@@ -106,6 +110,8 @@ export function LoginScreen() {
           onChangeText={setPassword}
           secureTextEntry
           placeholder="至少 8 位"
+          autoCapitalize="none"
+          textContentType={isRegisterMode ? 'newPassword' : 'password'}
         />
 
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
@@ -127,7 +133,7 @@ export function LoginScreen() {
           disabled={submitting}
         />
         <Button
-          label={isRegisterMode ? '已有账号，去登录' : '没有账号，去注册'}
+          label={isRegisterMode ? '已有账户，去登录' : '没有账户，去注册'}
           onPress={() => {
             setMode(isRegisterMode ? 'login' : 'register');
             setErrorMessage('');
@@ -135,9 +141,6 @@ export function LoginScreen() {
           variant="secondary"
           disabled={submitting}
         />
-        <Text style={styles.registerHint}>
-          Demo 账号：{demoAuth.email} / {demoAuth.password}
-        </Text>
       </SurfaceCard>
     </AppScreen>
   );
@@ -219,12 +222,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     color: colors.negative,
-  },
-  registerHint: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 12,
-    lineHeight: 18,
-    color: colors.textMuted,
-    textAlign: 'center',
   },
 });
