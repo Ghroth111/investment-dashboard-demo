@@ -28,6 +28,7 @@ export type RootStackParamList = {
 export type TabParamList = {
   Dashboard: undefined;
   Accounts: undefined;
+  Add: undefined;
   Transactions: undefined;
   Settings: undefined;
 };

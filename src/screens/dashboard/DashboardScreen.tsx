@@ -1,23 +1,24 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { MergedHoldingListCard } from '../../components/dashboard/MergedHoldingListCard';
 import { AssetSummaryCard } from '../../components/dashboard/AssetSummaryCard';
 import { CompactAccountCard } from '../../components/dashboard/CompactAccountCard';
 import { AppScreen } from '../../components/layout/AppScreen';
 import { EmptyState } from '../../components/states/EmptyState';
-import { Button } from '../../components/ui/Button';
 import { SurfaceCard } from '../../components/ui/SurfaceCard';
 import { buildAggregatedAssets, groupAssetsByClass } from '../../features/assets/selectors';
 import { getTopAccounts } from '../../features/dashboard/selectors';
 import type { AppTabScreenProps } from '../../navigation/types';
 import { useDemoStore } from '../../store/demoStore';
-import { fontFamilies, spacing } from '../../theme';
+import { colors, fontFamilies, spacing } from '../../theme';
 
 export function DashboardScreen({ navigation }: AppTabScreenProps<'Dashboard'>) {
   const user = useDemoStore((state) => state.user);
   const accounts = useDemoStore((state) => state.accounts);
   const exchangeRates = useDemoStore((state) => state.exchangeRates);
   const portfolioHistory = useDemoStore((state) => state.portfolioHistory);
+  const [accountsExpanded, setAccountsExpanded] = useState(false);
 
   if (accounts.length === 0) {
     return (
@@ -47,71 +48,49 @@ export function DashboardScreen({ navigation }: AppTabScreenProps<'Dashboard'>) 
         onAnalyticsPress={() => navigation.navigate('Accounts')}
       />
 
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>重点账户</Text>
-        <Text style={styles.sectionDescription}>保留最常用的账户入口，方便直接进入账户详情。</Text>
-      </View>
-      <View style={styles.quickGrid}>
-        {quickAccounts.map((account) => (
-          <CompactAccountCard
-            key={account.id}
-            account={account}
-            baseCurrency={user.baseCurrency}
-            exchangeRates={exchangeRates}
-            onPress={() => navigation.navigate('AccountDetail', { accountId: account.id })}
-          />
-        ))}
-      </View>
-
       <MergedHoldingListCard
         sections={groupedAssets}
         currency={user.baseCurrency}
         onAssetPress={(assetKey) => navigation.navigate('AssetDetail', { assetKey })}
       />
 
-      <SurfaceCard style={styles.quickActions}>
-        <Text style={styles.sectionTitle}>快捷操作</Text>
-        <View style={styles.actionButtons}>
-          <Button
-            label="添加账户"
-            onPress={() => navigation.navigate('AddAccount')}
-            icon="add-circle-outline"
-            style={styles.actionButton}
-          />
-          <Button
-            label="截图导入"
-            onPress={() => navigation.navigate('ScreenshotImport')}
-            icon="scan-outline"
-            variant="secondary"
-            style={styles.actionButton}
-          />
-          <Button
-            label="查看流水"
-            onPress={() => navigation.navigate('Transactions')}
-            icon="receipt-outline"
-            variant="ghost"
-            style={styles.actionButton}
-          />
-        </View>
+      <SurfaceCard style={styles.collapsibleCard}>
+        <Pressable
+          onPress={() => setAccountsExpanded((prev) => !prev)}
+          style={styles.collapsibleHeader}
+        >
+          <View style={styles.collapsibleHeaderLeft}>
+            <Text style={styles.sectionTitle}>重点账户</Text>
+            <Text style={styles.collapsibleHint}>
+              {accountsExpanded ? '点击收起' : `${quickAccounts.length} 个账户，点击展开`}
+            </Text>
+          </View>
+          <Text style={styles.collapsibleIcon}>{accountsExpanded ? '▲' : '▼'}</Text>
+        </Pressable>
+
+        {accountsExpanded ? (
+          <View style={styles.quickGrid}>
+            {quickAccounts.map((account) => (
+              <CompactAccountCard
+                key={account.id}
+                account={account}
+                baseCurrency={user.baseCurrency}
+                exchangeRates={exchangeRates}
+                onPress={() => navigation.navigate('AccountDetail', { accountId: account.id })}
+              />
+            ))}
+          </View>
+        ) : null}
       </SurfaceCard>
     </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  sectionHeader: {
-    gap: spacing.xs,
-  },
   sectionTitle: {
     fontFamily: fontFamilies.semibold,
     fontSize: 18,
     color: '#10233B',
-  },
-  sectionDescription: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 13,
-    lineHeight: 20,
-    color: '#5E6F84',
   },
   quickGrid: {
     flexDirection: 'row',
@@ -119,13 +98,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     rowGap: spacing.md,
   },
-  quickActions: {
+  collapsibleCard: {
     gap: spacing.md,
   },
-  actionButtons: {
-    gap: spacing.sm,
+  collapsibleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  actionButton: {
-    width: '100%',
+  collapsibleHeaderLeft: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  collapsibleHint: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#5E6F84',
+  },
+  collapsibleIcon: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 14,
+    color: colors.textMuted,
   },
 });

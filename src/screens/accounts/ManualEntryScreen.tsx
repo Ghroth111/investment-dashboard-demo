@@ -19,7 +19,7 @@ import type { RootStackScreenProps } from '../../navigation/types';
 import { fetchLatestPrice, searchUsStocks, type StockSearchResult } from '../../services/marketData';
 import { useDemoStore } from '../../store/demoStore';
 import { colors, fontFamilies, radius, spacing } from '../../theme';
-import type {
+import {
   Account,
   AccountType,
   AssetClass,
@@ -27,7 +27,7 @@ import type {
   ManualEntryPrefill,
   ManualHoldingInput,
 } from '../../types/models';
-import { formatCurrency, formatDateTime } from '../../utils/formatters';
+import { formatDateTime } from '../../utils/formatters';
 
 interface HoldingDraft {
   id: string;
@@ -73,14 +73,6 @@ const currencyOptions = [
   { label: 'EUR', value: 'EUR' },
   { label: 'HKD', value: 'HKD' },
   { label: 'USDT', value: 'USDT' },
-];
-
-const assetClassOptions = [
-  { label: 'Stock', value: 'Stock' },
-  { label: 'ETF', value: 'ETF' },
-  { label: 'Fund', value: 'Fund' },
-  { label: 'Crypto', value: 'Crypto' },
-  { label: 'Cash', value: 'Cash' },
 ];
 
 const accountTypeLabels: Record<AccountType, string> = {
@@ -234,6 +226,7 @@ function HoldingEditorCard({
 
       onChange({
         currentPrice: formatLivePrice(quote.price),
+        costBasis: holding.costBasis || formatLivePrice(quote.price),
         exchange: overrides?.exchange || holding.exchange,
         micCode: overrides?.micCode || holding.micCode,
         country: overrides?.country || holding.country,
@@ -293,8 +286,7 @@ function HoldingEditorCard({
             autoCorrect={false}
           />
           <Text style={styles.searchHint}>
-            Search results come from Twelve Data. Selecting one result will fill the name, code, and
-            latest price.
+            {/* 选择后自动填充资产信息和最新价格 */}
           </Text>
           {searchLoading ? (
             <View style={styles.inlineStatus}>
@@ -327,28 +319,25 @@ function HoldingEditorCard({
         </View>
       ) : null}
 
-      <InputField
-        label="Asset Name"
-        value={holding.name}
-        onChangeText={(text) => onChange({ name: text })}
-        placeholder="Apple Inc."
-      />
-      <InputField
-        label="Symbol"
-        value={holding.symbol}
-        onChangeText={(text) => onChange({ symbol: normalizeSymbol(text) })}
-        placeholder="AAPL"
-        autoCapitalize="characters"
-      />
-      <View style={styles.optionBlock}>
-        <Text style={styles.optionLabel}>Asset Class</Text>
-        <SegmentedControl
-          options={assetClassOptions}
-          value={holding.assetClass}
-          onChange={(next) => onChange({ assetClass: next as AssetClass })}
-          compact
-        />
-      </View>
+      {holding.symbol && holding.name ? (
+        <View style={styles.selectedSymbolBlock}>
+          <View style={styles.selectedSymbolRow}>
+            <Text style={styles.selectedSymbol}>{holding.symbol}</Text>
+            <Text style={styles.selectedName}>{holding.name}</Text>
+          </View>
+          <Text style={styles.selectedMeta}>
+            {holding.exchange ? `${holding.exchange} · ` : ''}{holding.assetClass}
+          </Text>
+          {priceLoading ? (
+            <View style={styles.inlineStatus}>
+              <ActivityIndicator size="small" color={colors.info} />
+              <Text style={styles.inlineStatusText}>Fetching price...</Text>
+            </View>
+          ) : null}
+          {priceError ? <Text style={styles.errorText}>{priceError}</Text> : null}
+        </View>
+      ) : null}
+
       <InputField
         label="Quantity"
         value={holding.quantity}
@@ -356,44 +345,8 @@ function HoldingEditorCard({
         keyboardType="decimal-pad"
         placeholder="0"
       />
-
-      <View style={styles.priceHeader}>
-        <Text style={styles.optionLabel}>Current Price</Text>
-        <Pressable
-          onPress={() => {
-            void refreshPrice();
-          }}
-          disabled={priceLoading || !holding.symbol}
-          style={styles.refreshPriceAction}
-        >
-          {priceLoading ? (
-            <ActivityIndicator size="small" color={colors.info} />
-          ) : (
-            <Ionicons
-              name="refresh-outline"
-              size={14}
-              color={holding.symbol ? colors.info : colors.textMuted}
-            />
-          )}
-          <Text style={[styles.refreshPriceText, !holding.symbol ? styles.disabledText : null]}>
-            Refresh price
-          </Text>
-        </Pressable>
-      </View>
       <InputField
-        label="Latest Price"
-        value={holding.currentPrice}
-        onChangeText={(text) => onChange({ currentPrice: text })}
-        keyboardType="decimal-pad"
-        placeholder="Enter or fetch the latest price"
-      />
-      <Text style={styles.priceHint}>
-        If live pricing is unavailable, you can still continue with a manual price.
-      </Text>
-      {priceError ? <Text style={styles.errorText}>{priceError}</Text> : null}
-
-      <InputField
-        label="Average Cost"
+        label="成本价"
         value={holding.costBasis}
         onChangeText={(text) => onChange({ costBasis: text })}
         keyboardType="decimal-pad"
@@ -468,6 +421,7 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
   );
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+  const [accountSetupExpanded, setAccountSetupExpanded] = useState(false);
 
   useEffect(() => {
     if (!showImportDestination || existingAccountId) {
@@ -517,13 +471,6 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
     }, 0);
   }, [holdings, selectedExistingAccount]);
 
-  const previewTotal =
-    holdings.reduce((sum, holding) => {
-      const quantity = Number.parseFloat(holding.quantity || '0');
-      const price = Number.parseFloat(holding.currentPrice || '0');
-      return sum + quantity * price;
-    }, 0) + Number.parseFloat(cashBalance || '0');
-
   function updateHolding(id: string, patch: Partial<HoldingDraft>) {
     setHoldings((current) =>
       current.map((holding) => (holding.id === id ? { ...holding, ...patch } : holding)),
@@ -554,9 +501,7 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
     }
 
     if (saveMode === 'new' && !accountName.trim()) {
-      setSaveMessage('Enter an account name before saving.');
-      Alert.alert('Missing account name', 'Create mode requires an account name.');
-      return;
+      setAccountName('手动账户');
     }
 
     const parsedCashBalance = Number.parseFloat(cashBalance || '0');
@@ -597,23 +542,25 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
     const parsedHoldings: ManualHoldingInput[] = [];
 
     for (const holding of nextHoldings) {
-      const quantity = Number.parseFloat(holding.quantity);
-      const currentPrice = Number.parseFloat(holding.currentPrice);
-      const costBasis = Number.parseFloat(holding.costBasis);
-
-      if (
-        !holding.name.trim() ||
-        !holding.symbol.trim() ||
-        Number.isNaN(quantity) ||
-        Number.isNaN(currentPrice) ||
-        Number.isNaN(costBasis)
-      ) {
+      if (!holding.symbol.trim() || !holding.name.trim()) {
         const message =
-          `Holding #${parsedHoldings.length + 1} is incomplete. Fill in name, symbol, quantity, price, and average cost.`;
+          `Holding #${parsedHoldings.length + 1} 缺少证券信息，请先搜索选择一个标的。`;
         setSaveMessage(message);
         Alert.alert('Incomplete holding', message);
         return;
       }
+
+      const quantity = Number.parseFloat(holding.quantity);
+      if (Number.isNaN(quantity) || quantity <= 0) {
+        const message =
+          `Holding #${parsedHoldings.length + 1} 请输入有效的持仓数量。`;
+        setSaveMessage(message);
+        Alert.alert('Incomplete holding', message);
+        return;
+      }
+
+      const currentPrice = Number.parseFloat(holding.currentPrice) || 0;
+      const costBasis = Number.parseFloat(holding.costBasis) || currentPrice;
 
       parsedHoldings.push({
         name: holding.name.trim(),
@@ -634,7 +581,7 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
       );
 
       const resolvedAccount = selectedExistingAccount;
-      const resolvedName = saveMode === 'existing' ? resolvedAccount?.name ?? '' : accountName.trim();
+      const resolvedName = saveMode === 'existing' ? resolvedAccount?.name ?? '' : (accountName.trim() || '手动账户');
       const resolvedType = saveMode === 'existing' ? resolvedAccount?.type ?? accountType : accountType;
       const resolvedCurrency =
         saveMode === 'existing' ? resolvedAccount?.currency ?? currency : currency;
@@ -664,7 +611,7 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
 
   return (
     <AppScreen>
-      <View style={styles.header}>
+      {/* <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={20} color={colors.text} />
         </Pressable>
@@ -676,7 +623,7 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
               : 'Create or update an account manually when no live connection is available.'}
           </Text>
         </View>
-      </View>
+      </View> */}
 
       {showImportDestination ? (
         <SurfaceCard style={styles.card}>
@@ -716,65 +663,6 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
         </SurfaceCard>
       ) : null}
 
-      <SurfaceCard style={styles.card}>
-        <Text style={styles.sectionTitle}>Account Setup</Text>
-
-        {!showImportDestination ? (
-          <InputField
-            label="Account Name"
-            value={accountName}
-            onChangeText={setAccountName}
-            placeholder="Retirement Portfolio"
-          />
-        ) : null}
-
-        {saveMode === 'existing' && selectedExistingAccount ? (
-          <View style={styles.readOnlyBox}>
-            <View style={styles.readOnlyRow}>
-              <Text style={styles.readOnlyLabel}>Account</Text>
-              <Text style={styles.readOnlyValue}>{selectedExistingAccount.name}</Text>
-            </View>
-            <View style={styles.readOnlyRow}>
-              <Text style={styles.readOnlyLabel}>Type</Text>
-              <Text style={styles.readOnlyValue}>{accountTypeLabels[selectedExistingAccount.type]}</Text>
-            </View>
-            <View style={styles.readOnlyRow}>
-              <Text style={styles.readOnlyLabel}>Currency</Text>
-              <Text style={styles.readOnlyValue}>{selectedExistingAccount.currency}</Text>
-            </View>
-          </View>
-        ) : (
-          <>
-            <View style={styles.optionBlock}>
-              <Text style={styles.optionLabel}>Account Type</Text>
-              <SegmentedControl
-                options={accountTypeOptions}
-                value={accountType}
-                onChange={(next) => setAccountType(next as AccountType)}
-                compact
-              />
-            </View>
-            <View style={styles.optionBlock}>
-              <Text style={styles.optionLabel}>Quote Currency</Text>
-              <SegmentedControl
-                options={currencyOptions}
-                value={currency}
-                onChange={(next) => setCurrency(next as CurrencyCode)}
-                compact
-              />
-            </View>
-          </>
-        )}
-
-        <InputField
-          label="Cash Balance"
-          value={cashBalance}
-          onChangeText={setCashBalance}
-          placeholder="0"
-          keyboardType="decimal-pad"
-        />
-      </SurfaceCard>
-
       {holdings.map((holding, index) => (
         <HoldingEditorCard
           key={holding.id}
@@ -789,43 +677,102 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
 
       <Button label="Add Holding" onPress={addHolding} icon="add-outline" variant="secondary" />
 
-      <SurfaceCard style={styles.summaryCard}>
-        <Text style={styles.sectionTitle}>Preview</Text>
-        <Text style={styles.summaryValue}>
-          {formatCurrency(
-            previewTotal,
-            saveMode === 'existing' && selectedExistingAccount ? selectedExistingAccount.currency : currency,
-            0,
-          )}
-        </Text>
-        <Text style={styles.summaryText}>
-          {saveMode === 'existing'
-            ? 'Saving will update the selected account, append any new holdings, and keep trade sync aligned with quantity changes.'
-            : 'Saving will create a new account and make it available across the dashboard, analytics, and asset detail views.'}
-        </Text>
-        {saveMessage ? <Text style={styles.saveMessage}>{saveMessage}</Text> : null}
+      <SurfaceCard style={styles.card}>
         <Pressable
-          disabled={saving}
-          onPressIn={() => {
-            if (!saving) {
-              setSaveMessage('Preparing account changes...');
-            }
-          }}
-          onPress={() => {
-            void handleSave();
-          }}
-          style={({ pressed }) => [
-            styles.saveButton,
-            pressed && !saving ? styles.saveButtonPressed : null,
-            saving ? styles.saveButtonDisabled : null,
-          ]}
+          onPress={() => setAccountSetupExpanded((prev) => !prev)}
+          style={styles.collapsibleHeader}
         >
-          <Ionicons name="save-outline" size={18} color={colors.white} />
-          <Text style={styles.saveButtonLabel}>
-            {saving ? 'Saving...' : saveMode === 'existing' ? 'Merge Into Account' : 'Save New Account'}
-          </Text>
+          <View style={styles.collapsibleHeaderLeft}>
+            <Text style={styles.sectionTitle}>Account Setup</Text>
+            <Text style={styles.collapsibleHint}>
+              {accountSetupExpanded ? '点击收起' : '可选，留空将使用默认值'}
+            </Text>
+          </View>
+          <Text style={styles.collapsibleIcon}>{accountSetupExpanded ? '▲' : '▼'}</Text>
         </Pressable>
+
+        {accountSetupExpanded ? (
+          <>
+            {!showImportDestination ? (
+              <InputField
+                label="Account Name"
+                value={accountName}
+                onChangeText={setAccountName}
+                placeholder="手动账户"
+              />
+            ) : null}
+
+            {saveMode === 'existing' && selectedExistingAccount ? (
+              <View style={styles.readOnlyBox}>
+                <View style={styles.readOnlyRow}>
+                  <Text style={styles.readOnlyLabel}>Account</Text>
+                  <Text style={styles.readOnlyValue}>{selectedExistingAccount.name}</Text>
+                </View>
+                <View style={styles.readOnlyRow}>
+                  <Text style={styles.readOnlyLabel}>Type</Text>
+                  <Text style={styles.readOnlyValue}>{accountTypeLabels[selectedExistingAccount.type]}</Text>
+                </View>
+                <View style={styles.readOnlyRow}>
+                  <Text style={styles.readOnlyLabel}>Currency</Text>
+                  <Text style={styles.readOnlyValue}>{selectedExistingAccount.currency}</Text>
+                </View>
+              </View>
+            ) : (
+              <>
+                <View style={styles.optionBlock}>
+                  <Text style={styles.optionLabel}>Account Type</Text>
+                  <SegmentedControl
+                    options={accountTypeOptions}
+                    value={accountType}
+                    onChange={(next) => setAccountType(next as AccountType)}
+                    compact
+                  />
+                </View>
+                <View style={styles.optionBlock}>
+                  <Text style={styles.optionLabel}>Quote Currency</Text>
+                  <SegmentedControl
+                    options={currencyOptions}
+                    value={currency}
+                    onChange={(next) => setCurrency(next as CurrencyCode)}
+                    compact
+                  />
+                </View>
+              </>
+            )}
+
+            <InputField
+              label="Cash Balance"
+              value={cashBalance}
+              onChangeText={setCashBalance}
+              placeholder="0"
+              keyboardType="decimal-pad"
+            />
+          </>
+        ) : null}
       </SurfaceCard>
+
+      {saveMessage ? <Text style={styles.saveMessage}>{saveMessage}</Text> : null}
+      <Pressable
+        disabled={saving}
+        onPressIn={() => {
+          if (!saving) {
+            setSaveMessage('Preparing account changes...');
+          }
+        }}
+        onPress={() => {
+          void handleSave();
+        }}
+        style={({ pressed }) => [
+          styles.saveButton,
+          pressed && !saving ? styles.saveButtonPressed : null,
+          saving ? styles.saveButtonDisabled : null,
+        ]}
+      >
+        <Ionicons name="save-outline" size={18} color={colors.white} />
+        <Text style={styles.saveButtonLabel}>
+          {saving ? 'Saving...' : saveMode === 'existing' ? 'Merge Into Account' : 'Save'}
+        </Text>
+      </Pressable>
     </AppScreen>
   );
 }
@@ -871,6 +818,26 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.regular,
     fontSize: 13,
     lineHeight: 20,
+    color: colors.textMuted,
+  },
+  collapsibleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  collapsibleHeaderLeft: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  collapsibleHint: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.textMuted,
+  },
+  collapsibleIcon: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 14,
     color: colors.textMuted,
   },
   optionBlock: {
@@ -949,29 +916,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textMuted,
   },
-  priceHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  refreshPriceAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  selectedSymbolBlock: {
     gap: spacing.xs,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
-  refreshPriceText: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 12,
-    color: colors.info,
+  selectedSymbolRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
   },
-  disabledText: {
-    color: colors.textMuted,
+  selectedSymbol: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: 16,
+    color: colors.text,
   },
-  priceHint: {
-    marginTop: -6,
+  selectedName: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 14,
+    color: colors.text,
+  },
+  selectedMeta: {
     fontFamily: fontFamilies.regular,
     fontSize: 12,
-    lineHeight: 18,
     color: colors.textMuted,
   },
   errorText: {
@@ -1061,9 +1031,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.semibold,
     fontSize: 14,
     color: colors.text,
-  },
-  summaryCard: {
-    gap: spacing.sm,
   },
   summaryValue: {
     fontFamily: fontFamilies.bold,
