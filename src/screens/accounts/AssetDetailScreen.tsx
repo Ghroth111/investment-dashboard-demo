@@ -76,7 +76,9 @@ export function AssetDetailScreen({
           <Ionicons name="chevron-back" size={20} color={colors.text} />
         </Pressable>
         <View style={styles.headerCopy}>
-          <Text style={styles.platform}>{asset.positions.length > 1 ? 'Merged Asset' : primaryPosition?.platform}</Text>
+          <Text style={styles.platform}>
+            {asset.positions.length > 1 ? 'Merged Asset' : 'Single Account Position'}
+          </Text>
           <Text style={styles.title}>{asset.name}</Text>
           <Text style={styles.subtitle}>
             {asset.symbol} · {getAssetClassLabel(asset.assetClass)}
@@ -158,7 +160,7 @@ export function AssetDetailScreen({
               <View style={styles.positionMain}>
                 <Text style={styles.positionName}>{position.accountName}</Text>
                 <Text style={styles.positionMeta}>
-                  {position.platform} · Qty {position.quantity} · Updated {formatDateTime(position.updatedAt)}
+                  Qty {position.quantity} · Updated {formatDateTime(position.updatedAt)}
                 </Text>
               </View>
               <View style={styles.positionRight}>

@@ -52,7 +52,9 @@ export function MergedHoldingListCard({
                     <Text style={styles.rowMeta}>
                       {asset.symbol} · {asset.accountCount} account{asset.accountCount > 1 ? 's' : ''}
                     </Text>
-                    <Text style={styles.rowMeta}>{asset.platforms.join(' · ')}</Text>
+                    <Text style={styles.rowMeta}>
+                      {asset.positions.map((position) => position.accountName).join(' / ')}
+                    </Text>
                   </View>
 
                   <View style={styles.rowRight}>

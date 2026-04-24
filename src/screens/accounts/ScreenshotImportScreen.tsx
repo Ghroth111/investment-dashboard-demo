@@ -231,7 +231,7 @@ export function ScreenshotImportScreen({
           <Text style={styles.sectionTitle}>识别摘要</Text>
           <View style={styles.resultRow}>
             <Text style={styles.resultLabel}>平台</Text>
-            <Text style={styles.resultValue}>{importResult.draft.platform || '-'}</Text>
+            <Text style={styles.resultValue}>{importResult.draft.name || importResult.draft.platform || '-'}</Text>
           </View>
           <View style={styles.resultRow}>
             <Text style={styles.resultLabel}>账户类型</Text>

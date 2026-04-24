@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,18 +15,19 @@ import { Button } from '../../components/ui/Button';
 import { InputField } from '../../components/ui/InputField';
 import { SegmentedControl } from '../../components/ui/SegmentedControl';
 import { SurfaceCard } from '../../components/ui/SurfaceCard';
+import type { RootStackScreenProps } from '../../navigation/types';
 import { fetchLatestPrice, searchUsStocks, type StockSearchResult } from '../../services/marketData';
 import { useDemoStore } from '../../store/demoStore';
-import { colors, fontFamilies, spacing } from '../../theme';
-import type { RootStackScreenProps } from '../../navigation/types';
+import { colors, fontFamilies, radius, spacing } from '../../theme';
 import type {
+  Account,
   AccountType,
   AssetClass,
   CurrencyCode,
   ManualEntryPrefill,
   ManualHoldingInput,
 } from '../../types/models';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, formatDateTime } from '../../utils/formatters';
 
 interface HoldingDraft {
   id: string;
@@ -45,17 +46,25 @@ interface HoldingDraft {
 interface HoldingEditorCardProps {
   holding: HoldingDraft;
   index: number;
+  showSearch: boolean;
   onChange: (patch: Partial<HoldingDraft>) => void;
   onRemove: () => void;
   canRemove: boolean;
 }
 
+type SaveMode = 'new' | 'existing';
+
+const importDestinationOptions = [
+  { label: 'Create New', value: 'new' },
+  { label: 'Merge Existing', value: 'existing' },
+];
+
 const accountTypeOptions = [
-  { label: '券商', value: 'Brokerage' },
-  { label: '基金', value: 'Fund' },
-  { label: '加密', value: 'Crypto' },
-  { label: '现金', value: 'Cash' },
-  { label: '手动', value: 'Manual' },
+  { label: 'Brokerage', value: 'Brokerage' },
+  { label: 'Fund', value: 'Fund' },
+  { label: 'Crypto', value: 'Crypto' },
+  { label: 'Cash', value: 'Cash' },
+  { label: 'Manual', value: 'Manual' },
 ];
 
 const currencyOptions = [
@@ -63,15 +72,24 @@ const currencyOptions = [
   { label: 'CNY', value: 'CNY' },
   { label: 'EUR', value: 'EUR' },
   { label: 'HKD', value: 'HKD' },
+  { label: 'USDT', value: 'USDT' },
 ];
 
 const assetClassOptions = [
-  { label: '股票', value: 'Stock' },
+  { label: 'Stock', value: 'Stock' },
   { label: 'ETF', value: 'ETF' },
-  { label: '基金', value: 'Fund' },
-  { label: '加密', value: 'Crypto' },
-  { label: '现金', value: 'Cash' },
+  { label: 'Fund', value: 'Fund' },
+  { label: 'Crypto', value: 'Crypto' },
+  { label: 'Cash', value: 'Cash' },
 ];
+
+const accountTypeLabels: Record<AccountType, string> = {
+  Brokerage: 'Brokerage',
+  Fund: 'Fund',
+  Crypto: 'Crypto',
+  Cash: 'Cash',
+  Manual: 'Manual',
+};
 
 function createHoldingDraft(): HoldingDraft {
   return {
@@ -127,9 +145,18 @@ function formatLivePrice(price: number) {
   return price.toFixed(6).replace(/\.?0+$/, '');
 }
 
+function normalizeSymbol(symbol: string) {
+  return symbol.trim().toUpperCase();
+}
+
+function normalizeText(value?: string | null) {
+  return value?.trim().toLowerCase() ?? '';
+}
+
 function HoldingEditorCard({
   holding,
   index,
+  showSearch,
   onChange,
   onRemove,
   canRemove,
@@ -143,6 +170,13 @@ function HoldingEditorCard({
   const [hasCommittedSelection, setHasCommittedSelection] = useState(false);
 
   useEffect(() => {
+    if (!showSearch) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      setSearchError('');
+      return;
+    }
+
     const normalizedQuery = searchText.trim();
     if (!normalizedQuery || hasCommittedSelection) {
       setSearchResults([]);
@@ -164,7 +198,7 @@ function HoldingEditorCard({
       } catch (error) {
         if (!cancelled) {
           setSearchResults([]);
-          setSearchError(error instanceof Error ? error.message : '搜索失败，请稍后重试。');
+          setSearchError(error instanceof Error ? error.message : 'Search failed. Please try again.');
         }
       } finally {
         if (!cancelled) {
@@ -177,12 +211,12 @@ function HoldingEditorCard({
       cancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [hasCommittedSelection, searchText]);
+  }, [hasCommittedSelection, searchText, showSearch]);
 
   async function refreshPrice(overrides?: Partial<StockSearchResult>) {
     const symbol = overrides?.symbol || holding.symbol;
     if (!symbol) {
-      Alert.alert('请选择标的', '请先通过搜索结果选择一个真实标的，再刷新最新价格。');
+      Alert.alert('Missing symbol', 'Select or enter a symbol before refreshing the latest price.');
       return;
     }
 
@@ -206,7 +240,7 @@ function HoldingEditorCard({
         instrumentType: overrides?.instrumentType || holding.instrumentType,
       });
     } catch (error) {
-      setPriceError(error instanceof Error ? error.message : '获取最新价格失败。');
+      setPriceError(error instanceof Error ? error.message : 'Unable to refresh the latest price.');
     } finally {
       setPriceLoading(false);
     }
@@ -216,7 +250,7 @@ function HoldingEditorCard({
     setHasCommittedSelection(true);
     setSearchResults([]);
     setSearchError('');
-    setSearchText(`${result.symbol} · ${result.name}`);
+    setSearchText(`${result.symbol} / ${result.name}`);
 
     onChange({
       name: result.name,
@@ -234,7 +268,7 @@ function HoldingEditorCard({
   return (
     <SurfaceCard style={styles.card}>
       <View style={styles.holdingHeader}>
-        <Text style={styles.sectionTitle}>持仓 #{index + 1}</Text>
+        <Text style={styles.sectionTitle}>Holding #{index + 1}</Text>
         {canRemove ? (
           <Pressable onPress={onRemove} hitSlop={10}>
             <Ionicons name="trash-outline" size={18} color={colors.negative} />
@@ -242,69 +276,72 @@ function HoldingEditorCard({
         ) : null}
       </View>
 
-      <View style={styles.searchBlock}>
-        <Text style={styles.optionLabel}>搜索美股标的</Text>
-        <TextInput
-          value={searchText}
-          onChangeText={(text) => {
-            setSearchText(text);
-            setHasCommittedSelection(false);
-            setPriceError('');
-          }}
-          placeholder="输入 AAPL / Apple / Nvidia"
-          placeholderTextColor={colors.textMuted}
-          style={styles.searchInput}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <Text style={styles.searchHint}>
-          匹配结果来自 Twelve Data，选中后会自动带入名称、代码和最新价格。
-        </Text>
-        {searchLoading ? (
-          <View style={styles.inlineStatus}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.inlineStatusText}>正在搜索...</Text>
-          </View>
-        ) : null}
-        {searchError ? <Text style={styles.errorText}>{searchError}</Text> : null}
-        {searchResults.length > 0 ? (
-          <View style={styles.searchResults}>
-            {searchResults.map((result) => (
-              <Pressable
-                key={`${result.symbol}-${result.exchange}`}
-                onPress={() => {
-                  void handlePickResult(result);
-                }}
-                style={styles.searchResultItem}
-              >
-                <View style={styles.searchResultMain}>
-                  <Text style={styles.searchResultSymbol}>{result.symbol}</Text>
-                  <Text style={styles.searchResultName}>{result.name}</Text>
-                </View>
-                <Text style={styles.searchResultMeta}>
-                  {result.exchange} · {result.instrumentType}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-      </View>
+      {showSearch ? (
+        <View style={styles.searchBlock}>
+          <Text style={styles.optionLabel}>Search US symbol</Text>
+          <TextInput
+            value={searchText}
+            onChangeText={(text) => {
+              setSearchText(text);
+              setHasCommittedSelection(false);
+              setPriceError('');
+            }}
+            placeholder="AAPL / Apple / Nvidia"
+            placeholderTextColor={colors.textMuted}
+            style={styles.searchInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Text style={styles.searchHint}>
+            Search results come from Twelve Data. Selecting one result will fill the name, code, and
+            latest price.
+          </Text>
+          {searchLoading ? (
+            <View style={styles.inlineStatus}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.inlineStatusText}>Searching...</Text>
+            </View>
+          ) : null}
+          {searchError ? <Text style={styles.errorText}>{searchError}</Text> : null}
+          {searchResults.length > 0 ? (
+            <View style={styles.searchResults}>
+              {searchResults.map((result) => (
+                <Pressable
+                  key={`${result.symbol}-${result.exchange}`}
+                  onPress={() => {
+                    void handlePickResult(result);
+                  }}
+                  style={styles.searchResultItem}
+                >
+                  <View style={styles.searchResultMain}>
+                    <Text style={styles.searchResultSymbol}>{result.symbol}</Text>
+                    <Text style={styles.searchResultName}>{result.name}</Text>
+                  </View>
+                  <Text style={styles.searchResultMeta}>
+                    {result.exchange} / {result.instrumentType}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       <InputField
-        label="标的名称"
+        label="Asset Name"
         value={holding.name}
         onChangeText={(text) => onChange({ name: text })}
-        placeholder="例如 Apple Inc."
+        placeholder="Apple Inc."
       />
       <InputField
-        label="代码"
+        label="Symbol"
         value={holding.symbol}
-        onChangeText={(text) => onChange({ symbol: text.trim().toUpperCase() })}
-        placeholder="例如 AAPL"
+        onChangeText={(text) => onChange({ symbol: normalizeSymbol(text) })}
+        placeholder="AAPL"
         autoCapitalize="characters"
       />
       <View style={styles.optionBlock}>
-        <Text style={styles.optionLabel}>资产类型</Text>
+        <Text style={styles.optionLabel}>Asset Class</Text>
         <SegmentedControl
           options={assetClassOptions}
           value={holding.assetClass}
@@ -313,7 +350,7 @@ function HoldingEditorCard({
         />
       </View>
       <InputField
-        label="数量"
+        label="Quantity"
         value={holding.quantity}
         onChangeText={(text) => onChange({ quantity: text })}
         keyboardType="decimal-pad"
@@ -321,7 +358,7 @@ function HoldingEditorCard({
       />
 
       <View style={styles.priceHeader}>
-        <Text style={styles.optionLabel}>当前价格</Text>
+        <Text style={styles.optionLabel}>Current Price</Text>
         <Pressable
           onPress={() => {
             void refreshPrice();
@@ -332,27 +369,31 @@ function HoldingEditorCard({
           {priceLoading ? (
             <ActivityIndicator size="small" color={colors.info} />
           ) : (
-            <Ionicons name="refresh-outline" size={14} color={holding.symbol ? colors.info : colors.textMuted} />
+            <Ionicons
+              name="refresh-outline"
+              size={14}
+              color={holding.symbol ? colors.info : colors.textMuted}
+            />
           )}
           <Text style={[styles.refreshPriceText, !holding.symbol ? styles.disabledText : null]}>
-            刷新价格
+            Refresh price
           </Text>
         </Pressable>
       </View>
       <InputField
-        label="最新价格"
+        label="Latest Price"
         value={holding.currentPrice}
         onChangeText={(text) => onChange({ currentPrice: text })}
         keyboardType="decimal-pad"
-        placeholder="选择标的后自动带入，也可以手动填写"
+        placeholder="Enter or fetch the latest price"
       />
       <Text style={styles.priceHint}>
-        如果价格接口暂时不可用，你也可以手动填写最新价格后继续保存。
+        If live pricing is unavailable, you can still continue with a manual price.
       </Text>
       {priceError ? <Text style={styles.errorText}>{priceError}</Text> : null}
 
       <InputField
-        label="成本价"
+        label="Average Cost"
         value={holding.costBasis}
         onChangeText={(text) => onChange({ costBasis: text })}
         keyboardType="decimal-pad"
@@ -362,11 +403,59 @@ function HoldingEditorCard({
   );
 }
 
+function ExistingAccountOption({
+  account,
+  active,
+  onPress,
+}: {
+  account: Account;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.accountOption,
+        active ? styles.accountOptionActive : null,
+        pressed ? styles.accountOptionPressed : null,
+      ]}
+    >
+      <View style={styles.accountOptionMain}>
+        <Text style={[styles.accountOptionTitle, active ? styles.accountOptionTitleActive : null]}>
+          {account.name}
+        </Text>
+        <Text style={styles.accountOptionMeta}>
+          {accountTypeLabels[account.type]} / {account.currency} / {account.holdings.length} holdings
+        </Text>
+      </View>
+      <Text style={styles.accountOptionDate}>{formatDateTime(account.updatedAt)}</Text>
+    </Pressable>
+  );
+}
+
 export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'ManualEntry'>) {
   const addManualAccount = useDemoStore((state) => state.addManualAccount);
+  const accounts = useDemoStore((state) => state.accounts);
   const prefill = route.params?.prefill;
-  const [accountName, setAccountName] = useState(prefill?.name || '');
-  const [platformName, setPlatformName] = useState(prefill?.platform || '');
+  const showImportDestination = Boolean(prefill && accounts.length > 0);
+
+  const matchedExistingAccount = useMemo(() => {
+    const lookupTokens = [normalizeText(prefill?.name), normalizeText(prefill?.platform)].filter(Boolean);
+    if (lookupTokens.length === 0) {
+      return undefined;
+    }
+
+    return accounts.find((account) => {
+      const name = normalizeText(account.name);
+      const platform = normalizeText(account.platform);
+      return lookupTokens.includes(name) || lookupTokens.includes(platform);
+    });
+  }, [accounts, prefill?.name, prefill?.platform]);
+
+  const [saveMode, setSaveMode] = useState<SaveMode>(showImportDestination ? 'existing' : 'new');
+  const [existingAccountId, setExistingAccountId] = useState('');
+  const [accountName, setAccountName] = useState(prefill?.name || prefill?.platform || '');
   const [accountType, setAccountType] = useState<AccountType>(prefill?.type || 'Manual');
   const [currency, setCurrency] = useState<CurrencyCode>(prefill?.currency || 'USD');
   const [cashBalance, setCashBalance] = useState(
@@ -379,6 +468,54 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
   );
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+
+  useEffect(() => {
+    if (!showImportDestination || existingAccountId) {
+      return;
+    }
+
+    setExistingAccountId(matchedExistingAccount?.id ?? accounts[0]?.id ?? '');
+  }, [accounts, existingAccountId, matchedExistingAccount?.id, showImportDestination]);
+
+  useEffect(() => {
+    if (!showImportDestination && saveMode !== 'new') {
+      setSaveMode('new');
+    }
+  }, [saveMode, showImportDestination]);
+
+  const selectedExistingAccount = accounts.find((account) => account.id === existingAccountId);
+
+  useEffect(() => {
+    if (saveMode !== 'existing' || !selectedExistingAccount) {
+      return;
+    }
+
+    setAccountType(selectedExistingAccount.type);
+    setCurrency(selectedExistingAccount.currency);
+    setCashBalance(
+      prefill?.cashBalance !== null && prefill?.cashBalance !== undefined
+        ? String(prefill.cashBalance)
+        : String(selectedExistingAccount.cashBalance),
+    );
+  }, [prefill?.cashBalance, saveMode, selectedExistingAccount]);
+
+  const matchingHoldingCount = useMemo(() => {
+    if (!selectedExistingAccount) {
+      return 0;
+    }
+
+    const existingSymbols = new Set(
+      selectedExistingAccount.holdings.map((holding) => normalizeSymbol(holding.symbol)),
+    );
+
+    return holdings.reduce((count, holding) => {
+      if (!holding.symbol) {
+        return count;
+      }
+
+      return existingSymbols.has(normalizeSymbol(holding.symbol)) ? count + 1 : count;
+    }, 0);
+  }, [holdings, selectedExistingAccount]);
 
   const previewTotal =
     holdings.reduce((sum, holding) => {
@@ -408,17 +545,58 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
       return;
     }
 
-    setSaveMessage('正在校验并保存...');
+    setSaveMessage('Validating account data...');
 
-    if (!accountName.trim() || !platformName.trim()) {
-      setSaveMessage('请先填写账户名称和平台名称。');
-      Alert.alert('信息不完整', '请至少填写账户名称和平台名称。');
+    if (saveMode === 'existing' && !selectedExistingAccount) {
+      setSaveMessage('Select an existing account before saving.');
+      Alert.alert('Missing account', 'Choose one existing account to merge the imported holdings into.');
       return;
+    }
+
+    if (saveMode === 'new' && !accountName.trim()) {
+      setSaveMessage('Enter an account name before saving.');
+      Alert.alert('Missing account name', 'Create mode requires an account name.');
+      return;
+    }
+
+    const parsedCashBalance = Number.parseFloat(cashBalance || '0');
+    if (Number.isNaN(parsedCashBalance)) {
+      setSaveMessage('Cash balance must be a valid number.');
+      Alert.alert('Invalid cash balance', 'Please enter a valid cash balance.');
+      return;
+    }
+
+    const nextHoldings = holdings.map((holding) => ({ ...holding }));
+    let refreshedMissingPrice = false;
+
+    for (const holding of nextHoldings) {
+      if (holding.currentPrice.trim() || !holding.symbol.trim()) {
+        continue;
+      }
+
+      try {
+        setSaveMessage(`Refreshing the latest price for ${normalizeSymbol(holding.symbol)}...`);
+        const quote = await fetchLatestPrice({
+          symbol: normalizeSymbol(holding.symbol),
+          exchange: holding.exchange,
+          micCode: holding.micCode,
+          country: holding.country,
+          type: holding.instrumentType,
+        });
+        holding.currentPrice = formatLivePrice(quote.price);
+        refreshedMissingPrice = true;
+      } catch {
+        // Validation below will stop the save if the price is still missing.
+      }
+    }
+
+    if (refreshedMissingPrice) {
+      setHoldings(nextHoldings);
     }
 
     const parsedHoldings: ManualHoldingInput[] = [];
 
-    for (const holding of holdings) {
+    for (const holding of nextHoldings) {
       const quantity = Number.parseFloat(holding.quantity);
       const currentPrice = Number.parseFloat(holding.currentPrice);
       const costBasis = Number.parseFloat(holding.costBasis);
@@ -430,14 +608,16 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
         Number.isNaN(currentPrice) ||
         Number.isNaN(costBasis)
       ) {
-        setSaveMessage(`持仓 #${parsedHoldings.length + 1} 信息不完整，请补全名称、代码、数量、价格和成本价。`);
-        Alert.alert('持仓信息不完整', '请补全每条持仓的名称、代码、数量、最新价格和成本价。');
+        const message =
+          `Holding #${parsedHoldings.length + 1} is incomplete. Fill in name, symbol, quantity, price, and average cost.`;
+        setSaveMessage(message);
+        Alert.alert('Incomplete holding', message);
         return;
       }
 
       parsedHoldings.push({
         name: holding.name.trim(),
-        symbol: holding.symbol.trim().toUpperCase(),
+        symbol: normalizeSymbol(holding.symbol),
         assetClass: holding.assetClass,
         quantity,
         currentPrice,
@@ -447,23 +627,36 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
 
     try {
       setSaving(true);
-      setSaveMessage('正在写入账户数据...');
+      setSaveMessage(
+        saveMode === 'existing'
+          ? 'Merging imported holdings into the selected account...'
+          : 'Creating the new account...',
+      );
+
+      const resolvedAccount = selectedExistingAccount;
+      const resolvedName = saveMode === 'existing' ? resolvedAccount?.name ?? '' : accountName.trim();
+      const resolvedType = saveMode === 'existing' ? resolvedAccount?.type ?? accountType : accountType;
+      const resolvedCurrency =
+        saveMode === 'existing' ? resolvedAccount?.currency ?? currency : currency;
+
       const accountId = await addManualAccount({
-        name: accountName.trim(),
-        platform: platformName.trim(),
-        type: accountType,
-        currency,
-        cashBalance: Number.parseFloat(cashBalance || '0'),
+        name: resolvedName,
+        platform: resolvedName,
+        type: resolvedType,
+        currency: resolvedCurrency,
+        cashBalance: parsedCashBalance,
         holdings: parsedHoldings,
+        targetAccountId: saveMode === 'existing' ? resolvedAccount?.id : undefined,
       });
 
-      navigation.replace('AccountDetail', { accountId });
+      navigation.reset({
+        index: 1,
+        routes: [{ name: 'MainTabs' }, { name: 'AccountDetail', params: { accountId } }],
+      });
     } catch (error) {
-      setSaveMessage(error instanceof Error ? `保存失败：${error.message}` : '保存失败，请检查网络后重试。');
-      Alert.alert(
-        '保存失败',
-        error instanceof Error ? error.message : '账户保存失败，请检查网络后重试。',
-      );
+      const message = error instanceof Error ? error.message : 'Unable to save the account right now.';
+      setSaveMessage(message);
+      Alert.alert('Save failed', message);
     } finally {
       setSaving(false);
     }
@@ -476,49 +669,105 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
           <Ionicons name="chevron-back" size={20} color={colors.text} />
         </Pressable>
         <View style={styles.headerCopy}>
-          <Text style={styles.title}>手动录入</Text>
+          <Text style={styles.title}>Manual Entry</Text>
           <Text style={styles.description}>
             {prefill
-              ? '截图识别结果已经预填，你可以继续校对后再保存。'
-              : '适合线下资产、家庭账户或暂时无法直连的平台。'}
+              ? 'Review the recognized holdings, then choose whether to merge them into an existing account or save them as a new one.'
+              : 'Create or update an account manually when no live connection is available.'}
           </Text>
         </View>
       </View>
 
+      {showImportDestination ? (
+        <SurfaceCard style={styles.card}>
+          <Text style={styles.sectionTitle}>Import Destination</Text>
+          <Text style={styles.sectionDescription}>
+            You can save this import as a new account or merge it into an existing one.
+          </Text>
+          <SegmentedControl options={importDestinationOptions} value={saveMode} onChange={(value) => setSaveMode(value as SaveMode)} />
+
+          {saveMode === 'existing' ? (
+            <View style={styles.accountOptionList}>
+              {accounts.map((account) => (
+                <ExistingAccountOption
+                  key={account.id}
+                  account={account}
+                  active={account.id === existingAccountId}
+                  onPress={() => setExistingAccountId(account.id)}
+                />
+              ))}
+              <View style={styles.importTip}>
+                <Ionicons name="swap-horizontal-outline" size={16} color={colors.info} />
+                <Text style={styles.importTipText}>
+                  {matchingHoldingCount > 0
+                    ? `${matchingHoldingCount} matching holding${matchingHoldingCount > 1 ? 's' : ''} will use the imported quantity by default. Unmatched holdings stay in the account and new symbols will be appended.`
+                    : 'Matching holdings in the selected account will use the imported quantity by default. Unmatched holdings stay in the account and new symbols will be appended.'}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <InputField
+              label="Account Name"
+              value={accountName}
+              onChangeText={setAccountName}
+              placeholder="Retirement Portfolio"
+            />
+          )}
+        </SurfaceCard>
+      ) : null}
+
       <SurfaceCard style={styles.card}>
-        <Text style={styles.sectionTitle}>账户信息</Text>
-        <InputField
-          label="账户名称"
-          value={accountName}
-          onChangeText={setAccountName}
-          placeholder="例如：退休组合 / 家庭备用金"
-        />
-        <InputField
-          label="平台名称"
-          value={platformName}
-          onChangeText={setPlatformName}
-          placeholder="例如：Manual Ledger / Family Office"
-        />
-        <View style={styles.optionBlock}>
-          <Text style={styles.optionLabel}>账户类型</Text>
-          <SegmentedControl
-            options={accountTypeOptions}
-            value={accountType}
-            onChange={(next) => setAccountType(next as AccountType)}
-            compact
+        <Text style={styles.sectionTitle}>Account Setup</Text>
+
+        {!showImportDestination ? (
+          <InputField
+            label="Account Name"
+            value={accountName}
+            onChangeText={setAccountName}
+            placeholder="Retirement Portfolio"
           />
-        </View>
-        <View style={styles.optionBlock}>
-          <Text style={styles.optionLabel}>计价币种</Text>
-          <SegmentedControl
-            options={currencyOptions}
-            value={currency}
-            onChange={(next) => setCurrency(next as CurrencyCode)}
-            compact
-          />
-        </View>
+        ) : null}
+
+        {saveMode === 'existing' && selectedExistingAccount ? (
+          <View style={styles.readOnlyBox}>
+            <View style={styles.readOnlyRow}>
+              <Text style={styles.readOnlyLabel}>Account</Text>
+              <Text style={styles.readOnlyValue}>{selectedExistingAccount.name}</Text>
+            </View>
+            <View style={styles.readOnlyRow}>
+              <Text style={styles.readOnlyLabel}>Type</Text>
+              <Text style={styles.readOnlyValue}>{accountTypeLabels[selectedExistingAccount.type]}</Text>
+            </View>
+            <View style={styles.readOnlyRow}>
+              <Text style={styles.readOnlyLabel}>Currency</Text>
+              <Text style={styles.readOnlyValue}>{selectedExistingAccount.currency}</Text>
+            </View>
+          </View>
+        ) : (
+          <>
+            <View style={styles.optionBlock}>
+              <Text style={styles.optionLabel}>Account Type</Text>
+              <SegmentedControl
+                options={accountTypeOptions}
+                value={accountType}
+                onChange={(next) => setAccountType(next as AccountType)}
+                compact
+              />
+            </View>
+            <View style={styles.optionBlock}>
+              <Text style={styles.optionLabel}>Quote Currency</Text>
+              <SegmentedControl
+                options={currencyOptions}
+                value={currency}
+                onChange={(next) => setCurrency(next as CurrencyCode)}
+                compact
+              />
+            </View>
+          </>
+        )}
+
         <InputField
-          label="现金余额"
+          label="Cash Balance"
           value={cashBalance}
           onChangeText={setCashBalance}
           placeholder="0"
@@ -531,26 +780,35 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
           key={holding.id}
           holding={holding}
           index={index}
+          showSearch={!prefill}
           canRemove={holdings.length > 1}
           onRemove={() => removeHolding(holding.id)}
           onChange={(patch) => updateHolding(holding.id, patch)}
         />
       ))}
 
-      <Button label="添加持仓" onPress={addHolding} icon="add-outline" variant="secondary" />
+      <Button label="Add Holding" onPress={addHolding} icon="add-outline" variant="secondary" />
 
       <SurfaceCard style={styles.summaryCard}>
-        <Text style={styles.sectionTitle}>预估结果</Text>
-        <Text style={styles.summaryValue}>{formatCurrency(previewTotal, currency, 0)}</Text>
+        <Text style={styles.sectionTitle}>Preview</Text>
+        <Text style={styles.summaryValue}>
+          {formatCurrency(
+            previewTotal,
+            saveMode === 'existing' && selectedExistingAccount ? selectedExistingAccount.currency : currency,
+            0,
+          )}
+        </Text>
         <Text style={styles.summaryText}>
-          保存后，账户会立即出现在首页和账户列表中，持仓也会同步计入资产分布。
+          {saveMode === 'existing'
+            ? 'Saving will update the selected account, append any new holdings, and keep trade sync aligned with quantity changes.'
+            : 'Saving will create a new account and make it available across the dashboard, analytics, and asset detail views.'}
         </Text>
         {saveMessage ? <Text style={styles.saveMessage}>{saveMessage}</Text> : null}
         <Pressable
           disabled={saving}
           onPressIn={() => {
             if (!saving) {
-              setSaveMessage('准备保存账户...');
+              setSaveMessage('Preparing account changes...');
             }
           }}
           onPress={() => {
@@ -563,7 +821,9 @@ export function ManualEntryScreen({ navigation, route }: RootStackScreenProps<'M
           ]}
         >
           <Ionicons name="save-outline" size={18} color={colors.white} />
-          <Text style={styles.saveButtonLabel}>{saving ? '保存中...' : '保存到账户列表'}</Text>
+          <Text style={styles.saveButtonLabel}>
+            {saving ? 'Saving...' : saveMode === 'existing' ? 'Merge Into Account' : 'Save New Account'}
+          </Text>
         </Pressable>
       </SurfaceCard>
     </AppScreen>
@@ -606,6 +866,12 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.semibold,
     fontSize: 18,
     color: colors.text,
+  },
+  sectionDescription: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.textMuted,
   },
   optionBlock: {
     gap: spacing.sm,
@@ -714,14 +980,107 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: colors.negative,
   },
+  accountOptionList: {
+    gap: spacing.sm,
+  },
+  accountOption: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    gap: spacing.xs,
+  },
+  accountOptionActive: {
+    borderColor: colors.info,
+    backgroundColor: colors.infoSoft,
+  },
+  accountOptionPressed: {
+    opacity: 0.92,
+  },
+  accountOptionMain: {
+    gap: spacing.xs,
+  },
+  accountOptionTitle: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: 15,
+    color: colors.text,
+  },
+  accountOptionTitleActive: {
+    color: colors.primary,
+  },
+  accountOptionMeta: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textMuted,
+  },
+  accountOptionDate: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  importTip: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.infoSoft,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  importTipText: {
+    flex: 1,
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.text,
+  },
+  readOnlyBox: {
+    gap: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  readOnlyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  readOnlyLabel: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  readOnlyValue: {
+    flex: 1,
+    textAlign: 'right',
+    fontFamily: fontFamilies.semibold,
+    fontSize: 14,
+    color: colors.text,
+  },
+  summaryCard: {
+    gap: spacing.sm,
+  },
+  summaryValue: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 30,
+    color: colors.text,
+  },
+  summaryText: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.textMuted,
+  },
   saveMessage: {
     fontFamily: fontFamilies.medium,
     fontSize: 12,
     lineHeight: 18,
     color: colors.info,
-  },
-  summaryCard: {
-    gap: spacing.sm,
   },
   saveButton: {
     minHeight: 48,
@@ -746,16 +1105,5 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.semibold,
     fontSize: 15,
     color: colors.white,
-  },
-  summaryValue: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 30,
-    color: colors.text,
-  },
-  summaryText: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 14,
-    lineHeight: 21,
-    color: colors.textMuted,
   },
 });

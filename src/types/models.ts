@@ -134,6 +134,7 @@ export interface HoldingTrade {
   currency: CurrencyCode;
   executedAt: string;
   changeRate: number;
+  referenceCostBasis?: number;
   source: 'manual' | 'sync';
   transactionId?: string;
 }
@@ -174,6 +175,10 @@ export interface ManualAccountPayload {
   currency: CurrencyCode;
   cashBalance: number;
   holdings: ManualHoldingInput[];
+}
+
+export interface SaveManualAccountPayload extends ManualAccountPayload {
+  targetAccountId?: string;
 }
 
 export interface ManualEntryHoldingDraft {

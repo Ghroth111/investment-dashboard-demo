@@ -42,7 +42,7 @@ export function AccountListItem({
       <SurfaceCard style={styles.card}>
         <View style={styles.header}>
           <View style={styles.headerCopy}>
-            <Text style={styles.platform}>{account.platform}</Text>
+            <Text style={styles.platform}>{account.currency} account</Text>
             <Text style={styles.name}>{account.name}</Text>
             <Text style={styles.subtitle}>
               {typeLabels[account.type]} · {account.holdings.length} 项资产 · {account.currency} ·{' '}

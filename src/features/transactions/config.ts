@@ -131,8 +131,9 @@ export function getTransactionCategoryIcon(category: TransactionCategory) {
 
 export function isInvestmentTransaction(transaction: Transaction) {
   return (
-    transaction.type === 'income' &&
-    investmentCategories.has(transaction.category as BaseIncomeCategory)
+    Boolean(transaction.tradeId) ||
+    (transaction.type === 'income' &&
+      investmentCategories.has(transaction.category as BaseIncomeCategory))
   );
 }
 

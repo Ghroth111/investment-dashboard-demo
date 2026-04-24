@@ -126,7 +126,10 @@ export function AccountDetailScreen({
     try {
       setDeleting(true);
       await deleteAccount(currentAccount.id);
-      navigation.goBack();
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
     } catch (error) {
       Alert.alert(
         'Delete Failed',
@@ -164,7 +167,6 @@ export function AccountDetailScreen({
           <Ionicons name="chevron-back" size={20} color={colors.text} />
         </Pressable>
         <View style={styles.headerCopy}>
-          <Text style={styles.platform}>{currentAccount.platform}</Text>
           <Text style={styles.title}>{currentAccount.name}</Text>
           <Text style={styles.subtitle}>{currentAccount.subtitle}</Text>
         </View>
@@ -172,7 +174,7 @@ export function AccountDetailScreen({
 
       <InteractivePerformanceChart
         title="Holding Performance"
-        subtitle={`${currentAccount.platform} · ${currentAccount.subtitle}`}
+        subtitle={currentAccount.subtitle}
         currency={user.baseCurrency}
         series={performanceSeries}
         defaultRange="YTD"

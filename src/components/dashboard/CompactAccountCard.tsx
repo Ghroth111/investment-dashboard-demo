@@ -39,7 +39,7 @@ export function CompactAccountCard({
       <SurfaceCard style={styles.card}>
         <View style={styles.header}>
           <Text style={styles.platform} numberOfLines={1}>
-            {account.platform}
+            {account.currency} account
           </Text>
           <Text style={styles.type}>{typeLabels[account.type]}</Text>
         </View>

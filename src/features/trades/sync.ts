@@ -66,22 +66,29 @@ function createTradeTransaction(
   snapshot: HoldingSnapshot,
   trade: HoldingTrade,
 ): Transaction {
-  const amount = trade.quantity * trade.price;
   const isBuy = trade.tradeType === 'buy';
+  const referenceCostBasis = trade.referenceCostBasis ?? trade.price;
+  const realizedPnl = (trade.price - referenceCostBasis) * trade.quantity;
 
   return {
     id: `txn-${trade.id}`,
-    title: `${isBuy ? 'Buy' : 'Sell'} ${trade.symbol}`,
-    type: isBuy ? 'expense' : 'income',
-    category: getCategoryForAssetClass(trade.assetClass),
-    subCategory: trade.assetClass,
-    amount,
+    title: isBuy
+      ? `Buy ${trade.symbol}`
+      : `${realizedPnl >= 0 ? 'Realized Gain' : 'Realized Loss'} ${trade.symbol}`,
+    type: isBuy ? 'transfer' : realizedPnl >= 0 ? 'income' : 'expense',
+    category: isBuy ? 'Transfer' : getCategoryForAssetClass(trade.assetClass),
+    subCategory: isBuy ? `Buy ${trade.assetClass}` : `Realized ${trade.assetClass} P/L`,
+    amount: isBuy ? trade.quantity * trade.price : Math.abs(realizedPnl),
     currency: trade.currency,
     date: trade.executedAt,
     note:
       trade.source === 'sync'
-        ? 'Auto synced from imported portfolio changes'
-        : 'Manual trade entry',
+        ? isBuy
+          ? 'Auto synced as an investment transfer from imported portfolio changes'
+          : 'Auto synced as realized profit or loss from imported portfolio changes'
+        : isBuy
+          ? 'Manual investment transfer'
+          : 'Manual realized profit or loss',
     account: snapshot.account.name,
     accountId: trade.accountId,
     holdingId: trade.holdingId,
@@ -97,6 +104,7 @@ function createTrade(
   tradeType: HoldingTradeType,
   quantity: number,
   price: number,
+  referenceCostBasis: number,
   source: HoldingTrade['source'],
 ) {
   const trade: HoldingTrade = {
@@ -113,6 +121,7 @@ function createTrade(
     currency: snapshot.holding.currency,
     executedAt: snapshot.account.updatedAt,
     changeRate: snapshot.holding.dailyChangeRate,
+    referenceCostBasis,
     source,
   };
 
@@ -178,7 +187,14 @@ export function syncTradeArtifacts({
 
     if (!previous && !tradeExists) {
       generatedTrades.push(
-        createTrade(snapshot, 'buy', snapshot.holding.quantity, snapshot.holding.costBasis, 'sync'),
+        createTrade(
+          snapshot,
+          'buy',
+          snapshot.holding.quantity,
+          snapshot.holding.costBasis,
+          snapshot.holding.costBasis,
+          'sync',
+        ),
       );
     }
 
@@ -188,11 +204,25 @@ export function syncTradeArtifacts({
 
       if (quantityDelta > epsilon) {
         generatedTrades.push(
-          createTrade(snapshot, 'buy', quantityDelta, snapshot.holding.costBasis, 'sync'),
+          createTrade(
+            snapshot,
+            'buy',
+            quantityDelta,
+            snapshot.holding.costBasis,
+            previous.holding.costBasis,
+            'sync',
+          ),
         );
       } else if (quantityDelta < -epsilon) {
         generatedTrades.push(
-          createTrade(snapshot, 'sell', Math.abs(quantityDelta), snapshot.holding.currentPrice, 'sync'),
+          createTrade(
+            snapshot,
+            'sell',
+            Math.abs(quantityDelta),
+            snapshot.holding.currentPrice,
+            previous.holding.costBasis,
+            'sync',
+          ),
         );
       }
     }
@@ -216,22 +246,29 @@ export function updateTradeTransaction(
   trade: HoldingTrade,
   accountName: string,
 ) {
-  const amount = trade.quantity * trade.price;
   const isBuy = trade.tradeType === 'buy';
+  const referenceCostBasis = trade.referenceCostBasis ?? trade.price;
+  const realizedPnl = (trade.price - referenceCostBasis) * trade.quantity;
 
   return {
     ...transaction,
-    title: `${isBuy ? 'Buy' : 'Sell'} ${trade.symbol}`,
-    type: isBuy ? 'expense' : 'income',
-    category: getCategoryForAssetClass(trade.assetClass),
-    subCategory: trade.assetClass,
-    amount,
+    title: isBuy
+      ? `Buy ${trade.symbol}`
+      : `${realizedPnl >= 0 ? 'Realized Gain' : 'Realized Loss'} ${trade.symbol}`,
+    type: isBuy ? 'transfer' : realizedPnl >= 0 ? 'income' : 'expense',
+    category: isBuy ? 'Transfer' : getCategoryForAssetClass(trade.assetClass),
+    subCategory: isBuy ? `Buy ${trade.assetClass}` : `Realized ${trade.assetClass} P/L`,
+    amount: isBuy ? trade.quantity * trade.price : Math.abs(realizedPnl),
     currency: trade.currency,
     date: trade.executedAt,
     note:
       trade.source === 'sync'
-        ? 'Auto synced from imported portfolio changes'
-        : 'Manual trade entry',
+        ? isBuy
+          ? 'Auto synced as an investment transfer from imported portfolio changes'
+          : 'Auto synced as realized profit or loss from imported portfolio changes'
+        : isBuy
+          ? 'Manual investment transfer'
+          : 'Manual realized profit or loss',
     account: accountName,
     accountId: trade.accountId,
     holdingId: trade.holdingId,

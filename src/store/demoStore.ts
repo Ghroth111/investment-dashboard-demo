@@ -19,6 +19,7 @@ import type {
   ExchangeRates,
   HoldingTrade,
   ManualAccountPayload,
+  SaveManualAccountPayload,
   ScreenshotImportPayload,
   ScreenshotImportResult,
   Transaction,
@@ -43,7 +44,7 @@ interface DemoState {
   restoreSession: () => Promise<void>;
   logout: () => void;
   setBaseCurrency: (currency: UserProfile['baseCurrency']) => void;
-  addManualAccount: (payload: ManualAccountPayload) => Promise<string>;
+  addManualAccount: (payload: SaveManualAccountPayload) => Promise<string>;
   addScreenshotAccount: (payload: ScreenshotImportPayload) => Promise<ScreenshotImportResult>;
   addTransaction: (payload: AddTransactionPayload) => string;
   updateHoldingTrade: (
@@ -102,6 +103,50 @@ function applyAccountSnapshot(
     holdingTrades: trades,
     transactions,
   };
+}
+
+function getHoldingMatchKey(symbol: string) {
+  return symbol.trim().toUpperCase();
+}
+
+function mergeHoldingsIntoAccount(account: Account, payload: SaveManualAccountPayload) {
+  const existingHoldingIndexByKey = new Map(
+    account.holdings.map((holding, index) => [getHoldingMatchKey(holding.symbol), index]),
+  );
+  const nextHoldings = account.holdings.map((holding) => ({ ...holding }));
+
+  payload.holdings.forEach((holding, index) => {
+    const existingIndex = existingHoldingIndexByKey.get(getHoldingMatchKey(holding.symbol));
+
+    if (existingIndex !== undefined) {
+      const existingHolding = nextHoldings[existingIndex];
+      nextHoldings[existingIndex] = {
+        ...existingHolding,
+        name: holding.name,
+        symbol: holding.symbol,
+        assetClass: holding.assetClass,
+        quantity: holding.quantity,
+        currentPrice: holding.currentPrice,
+        costBasis: holding.costBasis,
+        currency: account.currency,
+      };
+      return;
+    }
+
+    nextHoldings.push({
+      id: `holding-${Date.now()}-${index}-${Math.random().toString(16).slice(2, 6)}`,
+      name: holding.name,
+      symbol: holding.symbol,
+      assetClass: holding.assetClass,
+      quantity: holding.quantity,
+      currentPrice: holding.currentPrice,
+      costBasis: holding.costBasis,
+      currency: account.currency,
+      dailyChangeRate: 0.004 + (index % 3) * 0.0025,
+    });
+  });
+
+  return nextHoldings;
 }
 
 export const useDemoStore = create<DemoState>((set, get) => ({
@@ -207,6 +252,31 @@ export const useDemoStore = create<DemoState>((set, get) => ({
       },
     })),
   addManualAccount: async (payload) => {
+    if (payload.targetAccountId) {
+      const targetAccount = get().accounts.find((account) => account.id === payload.targetAccountId);
+      if (!targetAccount) {
+        throw new Error('The selected account could not be found.');
+      }
+
+      const mergedAccount: Account = {
+        ...targetAccount,
+        cashBalance: payload.cashBalance,
+        updatedAt: new Date().toISOString(),
+        holdings: mergeHoldingsIntoAccount(targetAccount, payload),
+      };
+
+      set((state) =>
+        applyAccountSnapshot(
+          state,
+          state.accounts.map((account) =>
+            account.id === targetAccount.id ? mergedAccount : account,
+          ),
+        ),
+      );
+
+      return targetAccount.id;
+    }
+
     const token = get().authToken;
     if (!token) {
       throw new Error('You must be logged in to add an account.');
@@ -324,11 +394,13 @@ export const useDemoStore = create<DemoState>((set, get) => ({
     }),
   deleteAccount: async (accountId) => {
     const token = get().authToken;
-    if (!token) {
-      throw new Error('You must be logged in to delete an account.');
+    if (token) {
+      try {
+        await removeAccount(token, accountId);
+      } catch {
+        // Keep local deletion available in the demo workspace even if the backend delete fails.
+      }
     }
-
-    await removeAccount(token, accountId);
 
     set((state) => ({
       accounts: state.accounts.filter((account) => account.id !== accountId),
@@ -336,6 +408,10 @@ export const useDemoStore = create<DemoState>((set, get) => ({
       transactions: state.transactions.filter((transaction) => transaction.accountId !== accountId),
     }));
 
-    await get().loadPortfolioHistory();
+    try {
+      await get().loadPortfolioHistory();
+    } catch {
+      // Preserve the local delete flow even if refreshing the remote portfolio history fails.
+    }
   },
 }));
