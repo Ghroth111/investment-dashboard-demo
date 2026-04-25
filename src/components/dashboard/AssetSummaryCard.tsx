@@ -19,10 +19,12 @@ import {
 import Svg, {
   Circle,
   Defs,
+  G,
   LinearGradient as SvgLinearGradient,
   Line,
   Path,
   Stop,
+  Text as SvgText,
 } from 'react-native-svg';
 
 import { convertAmount, getAccountMetrics } from '../../features/dashboard/selectors';
@@ -32,17 +34,12 @@ import type {
   AccountType,
   CurrencyCode,
   ExchangeRates,
-  TrendPoint,
   PerformancePoint,
   PerformanceRange,
   PerformanceSeries,
+  TrendPoint,
 } from '../../types/models';
-import {
-  formatCurrency,
-  formatDateTime,
-  formatPercent,
-  formatSignedCurrency,
-} from '../../utils/formatters';
+import { formatCurrency, formatPercent, formatSignedCurrency } from '../../utils/formatters';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -80,18 +77,19 @@ interface AnimatedMetrics {
   rangeChangeRate: number;
 }
 
-const chartHeight = 224;
+const chartHeight = 154;
 const chartInsetX = 8;
 const chartInsetTop = 10;
-const chartInsetBottom = 20;
+const chartInsetBottom = 28;
+const chartAxisLabelWidth = 40;
 
-const rangeOptions: Array<{ value: PerformanceRange; label: string; summaryLabel: string }> = [
-  { value: '7D', label: '7D', summaryLabel: '近 7 日收益' },
-  { value: '1M', label: '1M', summaryLabel: '近 1 月收益' },
-  { value: '6M', label: '6M', summaryLabel: '近 6 月收益' },
-  { value: 'YTD', label: 'YTD', summaryLabel: '年初至今收益' },
-  { value: '1Y', label: '1Y', summaryLabel: '近 1 年收益' },
-  { value: 'ALL', label: 'ALL', summaryLabel: '全部周期收益' },
+const rangeOptions: Array<{ value: PerformanceRange; label: string }> = [
+  { value: '7D', label: '7D' },
+  { value: '1M', label: '1M' },
+  { value: '6M', label: '6M' },
+  { value: 'YTD', label: 'YTD' },
+  { value: '1Y', label: '1Y' },
+  { value: 'ALL', label: 'All' },
 ];
 
 const categoryMeta: Record<
@@ -102,12 +100,12 @@ const categoryMeta: Record<
     accentColor: string;
   }
 > = {
-  overview: { label: '总览', icon: 'grid-outline', accentColor: '#7DE6D8' },
-  Brokerage: { label: '券商', icon: 'stats-chart-outline', accentColor: '#89D5FF' },
-  Fund: { label: '基金', icon: 'pie-chart-outline', accentColor: '#A4E7C2' },
-  Crypto: { label: '加密', icon: 'logo-bitcoin', accentColor: '#70D4FF' },
-  Cash: { label: '现金', icon: 'wallet-outline', accentColor: '#B0E7D4' },
-  Manual: { label: '手动', icon: 'create-outline', accentColor: '#B5CFF1' },
+  overview: { label: 'Overview', icon: 'grid-outline', accentColor: '#72D8FF' },
+  Brokerage: { label: 'Brokerage', icon: 'stats-chart-outline', accentColor: '#7DE6D8' },
+  Fund: { label: 'Fund', icon: 'pie-chart-outline', accentColor: '#A4E7C2' },
+  Crypto: { label: 'Crypto', icon: 'logo-bitcoin', accentColor: '#70D4FF' },
+  Cash: { label: 'Cash', icon: 'wallet-outline', accentColor: '#B0E7D4' },
+  Manual: { label: 'Manual', icon: 'create-outline', accentColor: '#B5CFF1' },
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -136,7 +134,7 @@ function formatSummaryDate(timestamp: string, range: PerformanceRange) {
   const date = new Date(timestamp);
 
   if (range === '7D') {
-    return new Intl.DateTimeFormat('zh-CN', {
+    return new Intl.DateTimeFormat('en-US', {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
@@ -144,19 +142,43 @@ function formatSummaryDate(timestamp: string, range: PerformanceRange) {
     }).format(date);
   }
 
-  if (range === 'ALL') {
-    return new Intl.DateTimeFormat('zh-CN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    }).format(date);
-  }
-
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
   }).format(date);
+}
+
+function formatChartDate(timestamp: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(timestamp));
+}
+
+function formatAxisValue(value: number) {
+  const absoluteValue = Math.abs(value);
+
+  if (absoluteValue >= 1000000) {
+    return `${Math.round(value / 1000000)}M`;
+  }
+
+  if (absoluteValue >= 1000) {
+    return `${Math.round(value / 1000)}K`;
+  }
+
+  return `${Math.round(value)}`;
+}
+
+function createEmptySeries(): PerformanceSeries {
+  return {
+    '7D': [],
+    '1M': [],
+    '6M': [],
+    YTD: [],
+    '1Y': [],
+    ALL: [],
+  };
 }
 
 function getAggregateMetrics(
@@ -225,14 +247,7 @@ function buildOverviewPerformanceSeries(
   currency: CurrencyCode,
   rates: ExchangeRates,
 ) {
-  const emptySeries: PerformanceSeries = {
-    '7D': [],
-    '1M': [],
-    '6M': [],
-    YTD: [],
-    '1Y': [],
-    ALL: [],
-  };
+  const emptySeries = createEmptySeries();
 
   (Object.keys(emptySeries) as PerformanceRange[]).forEach((range) => {
     const historyRange = mapHistoryRange(range);
@@ -256,6 +271,41 @@ function buildOverviewPerformanceSeries(
   return emptySeries;
 }
 
+function buildScaledPerformanceSeries(
+  overviewSeries: PerformanceSeries,
+  totalAssets: number,
+  cumulativeReturn: number,
+) {
+  const series = createEmptySeries();
+  const costBase = Math.max(totalAssets - cumulativeReturn, 1);
+
+  (Object.keys(series) as PerformanceRange[]).forEach((range) => {
+    const source = overviewSeries[range];
+    const lastSourceValue = source.at(-1)?.value ?? 0;
+
+    if (source.length < 2 || lastSourceValue === 0 || totalAssets === 0) {
+      series[range] = [];
+      return;
+    }
+
+    const scale = totalAssets / lastSourceValue;
+
+    series[range] = source.map((point) => {
+      const value = point.value * scale;
+      const gain = value - costBase;
+
+      return {
+        timestamp: point.timestamp,
+        value,
+        gain,
+        gainRate: gain / costBase,
+      };
+    });
+  });
+
+  return series;
+}
+
 function buildCategorySegments(
   accounts: Account[],
   currency: CurrencyCode,
@@ -277,6 +327,7 @@ function buildCategorySegments(
   );
 
   const overviewMetrics = getAggregateMetrics(accounts, currency, exchangeRates);
+  const overviewSeries = buildOverviewPerformanceSeries(portfolioHistory, currency, exchangeRates);
   const orderedTypes: AccountType[] = ['Brokerage', 'Fund', 'Crypto', 'Cash', 'Manual'];
 
   const segments: CategorySegment[] = [
@@ -291,12 +342,13 @@ function buildCategorySegments(
           : overviewMetrics.cumulativeReturn / overviewMetrics.costBase,
       todayChange: overviewMetrics.todayChange,
       lastUpdated: overviewMetrics.lastUpdated,
-      series: buildOverviewPerformanceSeries(portfolioHistory, currency, exchangeRates),
+      series: overviewSeries,
     },
   ];
 
   orderedTypes.forEach((type) => {
     const bucket = groupedAccounts[type];
+
     if (!bucket.length) {
       return;
     }
@@ -311,14 +363,11 @@ function buildCategorySegments(
       cumulativeReturnRate: metrics.costBase === 0 ? 0 : metrics.cumulativeReturn / metrics.costBase,
       todayChange: metrics.todayChange,
       lastUpdated: metrics.lastUpdated,
-      series: {
-        '7D': [],
-        '1M': [],
-        '6M': [],
-        YTD: [],
-        '1Y': [],
-        ALL: [],
-      },
+      series: buildScaledPerformanceSeries(
+        overviewSeries,
+        metrics.totalAssets,
+        metrics.cumulativeReturn,
+      ),
     });
   });
 
@@ -341,15 +390,74 @@ function getRangeChange(points: PerformancePoint[]) {
   };
 }
 
+function getPreviewSpanDays(range: PerformanceRange) {
+  switch (range) {
+    case '7D':
+      return 7;
+    case '1M':
+      return 30;
+    case '6M':
+      return 180;
+    case 'YTD':
+      return 120;
+    case '1Y':
+      return 365;
+    case 'ALL':
+      return 900;
+  }
+}
+
+function buildPreviewPerformancePoints(
+  segment: CategorySegment,
+  range: PerformanceRange,
+): PerformancePoint[] {
+  const pointCount = range === '7D' ? 18 : 30;
+  const totalAssets = Math.max(segment.totalAssets, 0);
+  const costBase = Math.max(totalAssets - segment.cumulativeReturn, 1);
+  const spanDays = getPreviewSpanDays(range);
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  const factors = Array.from({ length: pointCount }, (_, index) => {
+    const progress = index / (pointCount - 1);
+    const trend = 0.82 + progress * 0.24;
+    const dip = -0.055 * Math.exp(-Math.pow((progress - 0.42) / 0.15, 2));
+    const lateRamp = 0.045 * Math.exp(-Math.pow((progress - 0.82) / 0.18, 2));
+    const wave = Math.sin(progress * Math.PI * 5.2) * 0.018;
+    const smallWave = Math.sin(progress * Math.PI * 15.4) * 0.007;
+
+    return trend + dip + lateRamp + wave + smallWave;
+  });
+  const lastFactor = factors.at(-1) ?? 1;
+
+  return factors.map((factor, index) => {
+    const progress = index / (pointCount - 1);
+    const timestamp = new Date(now - spanDays * (1 - progress) * dayMs).toISOString();
+    const value =
+      index === pointCount - 1
+        ? totalAssets
+        : totalAssets === 0
+          ? 0
+          : totalAssets * (factor / lastFactor);
+    const gain = totalAssets === 0 ? 0 : value - costBase;
+
+    return {
+      timestamp,
+      value,
+      gain,
+      gainRate: totalAssets === 0 ? 0 : gain / costBase,
+    };
+  });
+}
+
 export function AssetSummaryCard({
   accounts,
   currency,
   exchangeRates,
   portfolioHistory,
-  onAnalyticsPress,
 }: AssetSummaryCardProps) {
   const { width } = useWindowDimensions();
-  const [range, setRange] = useState<PerformanceRange>('YTD');
+  const [range, setRange] = useState<PerformanceRange>('ALL');
   const [activeSegmentKey, setActiveSegmentKey] = useState<SegmentKey>('overview');
   const [scrubbing, setScrubbing] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -371,7 +479,10 @@ export function AssetSummaryCard({
   );
   const activeSegment =
     segments.find((segment) => segment.key === activeSegmentKey) ?? segments[0] ?? null;
-  const points = activeSegment?.series[range] ?? [];
+  const points = useMemo(
+    () => (activeSegment ? buildPreviewPerformancePoints(activeSegment, range) : []),
+    [activeSegment, range],
+  );
   const lastPoint = points.at(-1) ?? null;
   const rangeChange = useMemo(() => getRangeChange(points), [points]);
   const hasSufficientHistory = points.length >= 2;
@@ -422,14 +533,27 @@ export function AssetSummaryCard({
     };
   }, [activeSegment, countUpProgress, lastPoint, rangeChange, revealProgress]);
 
+  const chartBounds = useMemo(() => {
+    if (points.length === 0) {
+      return { min: 0, max: 1 };
+    }
+
+    const rawMin = Math.min(...points.map((point) => point.value));
+    const rawMax = Math.max(...points.map((point) => point.value));
+    const rangeValue = Math.max(rawMax - rawMin, Math.abs(rawMax) * 0.02, 1);
+
+    return {
+      min: rawMin - rangeValue * 0.1,
+      max: rawMax + rangeValue * 0.08,
+    };
+  }, [points]);
+
   const normalized = useMemo(() => {
     if (!chartWidth || points.length === 0) {
       return [];
     }
 
-    const min = Math.min(...points.map((point) => point.value));
-    const max = Math.max(...points.map((point) => point.value));
-    const drawableWidth = Math.max(chartWidth - chartInsetX * 2, 1);
+    const drawableWidth = Math.max(chartWidth - chartInsetX * 2 - chartAxisLabelWidth, 1);
     const drawableHeight = chartHeight - chartInsetTop - chartInsetBottom;
 
     return points.map((point, index) => {
@@ -438,7 +562,8 @@ export function AssetSummaryCard({
       const y =
         chartHeight -
         chartInsetBottom -
-        ((point.value - min) / Math.max(max - min, 1)) * drawableHeight;
+        ((point.value - chartBounds.min) / Math.max(chartBounds.max - chartBounds.min, 1)) *
+          drawableHeight;
 
       return {
         ...point,
@@ -446,7 +571,42 @@ export function AssetSummaryCard({
         y,
       };
     });
-  }, [chartWidth, points]);
+  }, [chartBounds.max, chartBounds.min, chartWidth, points]);
+
+  const yAxisTicks = useMemo(() => {
+    if (!chartWidth || !hasSufficientHistory) {
+      return [];
+    }
+
+    const tickCount = 4;
+    const drawableHeight = chartHeight - chartInsetTop - chartInsetBottom;
+
+    return Array.from({ length: tickCount }, (_, index) => {
+      const ratio = index / (tickCount - 1);
+      const value = chartBounds.max - (chartBounds.max - chartBounds.min) * ratio;
+
+      return {
+        value,
+        y: chartInsetTop + drawableHeight * ratio,
+      };
+    });
+  }, [chartBounds.max, chartBounds.min, chartWidth, hasSufficientHistory]);
+
+  const xAxisTicks = useMemo(() => {
+    if (!normalized.length) {
+      return [];
+    }
+
+    const lastIndex = normalized.length - 1;
+    const indexes = [0, Math.floor(lastIndex / 3), Math.floor((lastIndex * 2) / 3), lastIndex];
+
+    return Array.from(new Set(indexes))
+      .map((index) => {
+        const point = normalized[index];
+        return point ? { x: point.x, label: formatChartDate(point.timestamp) } : null;
+      })
+      .filter((tick): tick is { x: number; label: string } => tick !== null);
+  }, [normalized]);
 
   const linePath = useMemo(() => {
     if (normalized.length === 0) {
@@ -471,13 +631,11 @@ export function AssetSummaryCard({
   const displayedIndex = Math.min(activeIndex, Math.max(normalized.length - 1, 0));
   const activeCoordinates = normalized[displayedIndex];
   const activePoint = points[displayedIndex] ?? lastPoint;
-  const activeRangeMeta =
-    rangeOptions.find((option) => option.value === range) ?? rangeOptions[0];
   const animatedChartWidth = revealProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, chartWidth || Math.max(width - 92, 248)],
+    outputRange: [0, chartWidth || Math.max(width - 64, 248)],
   });
-  const floatingDateWidth = 136;
+  const floatingDateWidth = 116;
   const floatingDateLeft = activeCoordinates
     ? clamp(activeCoordinates.x - floatingDateWidth / 2, 0, Math.max(chartWidth - floatingDateWidth, 0))
     : 0;
@@ -488,8 +646,9 @@ export function AssetSummaryCard({
     }
 
     const locationX = event.nativeEvent.locationX;
+    const drawableWidth = Math.max(chartWidth - chartInsetX * 2 - chartAxisLabelWidth, 1);
     const nextIndex = Math.round(
-      ((locationX - chartInsetX) / Math.max(chartWidth - chartInsetX * 2, 1)) * (normalized.length - 1),
+      ((locationX - chartInsetX) / drawableWidth) * (normalized.length - 1),
     );
 
     setActiveIndex(Math.max(0, Math.min(normalized.length - 1, nextIndex)));
@@ -537,9 +696,6 @@ export function AssetSummaryCard({
   const displayedCumulativeRate = scrubbing
     ? (activePoint?.gainRate ?? 0)
     : animatedMetrics.cumulativeReturnRate;
-  const primaryChange = scrubbing && activePoint ? activePoint.gain : animatedMetrics.rangeChange;
-  const primaryChangeRate = scrubbing && activePoint ? activePoint.gainRate : animatedMetrics.rangeChangeRate;
-  const primaryLabel = scrubbing ? '持有收益' : activeRangeMeta.summaryLabel;
   const visibleTotalAssets = hasSufficientHistory ? displayedValue : activeSegment.totalAssets;
   const visibleCumulative = hasSufficientHistory
     ? displayedCumulative
@@ -550,47 +706,54 @@ export function AssetSummaryCard({
   const visibleTodayChange = hasSufficientHistory
     ? animatedMetrics.todayChange
     : activeSegment.todayChange;
-  const visiblePrimaryChange = hasSufficientHistory ? primaryChange : 0;
-  const visiblePrimaryChangeRate = hasSufficientHistory ? primaryChangeRate : 0;
 
   return (
     <LinearGradient
-      colors={['#0E2948', '#173959', '#20486B']}
+      colors={['#061F39', '#0B2B4D', '#12385B']}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.card}
     >
-      <View style={styles.topRow}>
-        <View style={styles.summaryBlock}>
-          <Text style={styles.eyebrow}>总资产</Text>
-          <Text style={styles.value}>{formatCurrency(visibleTotalAssets, currency, 0)}</Text>
-          <View style={styles.performanceRow}>
-            <Text
-              style={[
-                styles.performanceValue,
-                visiblePrimaryChange >= 0 ? styles.positive : styles.negative,
-              ]}
-            >
-              {formatSignedCurrency(visiblePrimaryChange, currency, 0)} ({formatPercent(visiblePrimaryChangeRate)})
-            </Text>
-            <Text style={styles.performanceLabel}>{primaryLabel}</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
+          {formatCurrency(visibleTotalAssets, currency, 0)}
+        </Text>
+
+        <View style={styles.headerMetrics}>
+          <View style={[styles.headerMetric, styles.totalReturnMetric]}>
+            <Text style={styles.headerMetricLabel}>Total Return</Text>
+            <View style={styles.totalReturnRow}>
+              <Text
+                style={[
+                  styles.headerMetricValue,
+                  visibleCumulative >= 0 ? styles.positive : styles.negative,
+                ]}
+                numberOfLines={1}
+              >
+                {formatSignedCurrency(visibleCumulative, currency, 0)}
+              </Text>
+              <View style={styles.ratePill}>
+                <Text style={styles.ratePillText}>{formatPercent(visibleCumulativeRate)}</Text>
+              </View>
+            </View>
           </View>
-          <View style={styles.performanceRow}>
+
+          <View style={styles.headerDivider} />
+
+          <View style={[styles.headerMetric, styles.todayMetric]}>
+            <Text style={styles.headerMetricLabel}>Today's Gain</Text>
             <Text
               style={[
-                styles.performanceValue,
+                styles.headerMetricValue,
                 visibleTodayChange >= 0 ? styles.positive : styles.negative,
               ]}
+              numberOfLines={1}
             >
               {formatSignedCurrency(visibleTodayChange, currency, 0)}
             </Text>
-            <Text style={styles.performanceLabel}>今日盈亏</Text>
           </View>
-        </View>
 
-        <Pressable onPress={onAnalyticsPress} style={styles.analyticsButton}>
-          <Ionicons name="pie-chart-outline" size={18} color={colors.white} />
-        </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -619,8 +782,8 @@ export function AssetSummaryCard({
               >
                 <Ionicons
                   name={segment.icon}
-                  size={16}
-                  color={active ? segment.accentColor : 'rgba(255,255,255,0.72)'}
+                  size={14}
+                  color={active ? segment.accentColor : 'rgba(255,255,255,0.70)'}
                 />
               </View>
               {active ? <Text style={styles.segmentChipText}>{segment.label}</Text> : null}
@@ -647,37 +810,75 @@ export function AssetSummaryCard({
             <Svg width={chartWidth} height={chartHeight}>
               <Defs>
                 <SvgLinearGradient id="summaryAreaFill" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <Stop offset="0%" stopColor={activeSegment.accentColor} stopOpacity={0.34} />
+                  <Stop offset="0%" stopColor={activeSegment.accentColor} stopOpacity={0.42} />
                   <Stop offset="100%" stopColor={activeSegment.accentColor} stopOpacity={0} />
                 </SvgLinearGradient>
               </Defs>
+
+              {yAxisTicks.map((tick) => (
+                <G key={`y-${tick.y}`}>
+                  <Line
+                    x1={0}
+                    x2={Math.max(chartWidth - chartAxisLabelWidth, 0)}
+                    y1={tick.y}
+                    y2={tick.y}
+                    stroke="rgba(255,255,255,0.12)"
+                    strokeWidth={1}
+                    strokeDasharray="5 6"
+                  />
+                  <SvgText
+                    x={chartWidth - 2}
+                    y={tick.y + 4}
+                    fill="rgba(255,255,255,0.78)"
+                    fontSize={11}
+                    fontFamily={fontFamilies.medium}
+                    textAnchor="end"
+                  >
+                    {formatAxisValue(tick.value)}
+                  </SvgText>
+                </G>
+              ))}
 
               <Path d={areaPath} fill="url(#summaryAreaFill)" />
               <Path
                 d={linePath}
                 stroke={activeSegment.accentColor}
-                strokeWidth={3.2}
+                strokeWidth={3}
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 fill="none"
               />
               <Line
                 x1={0}
-                x2={chartWidth}
+                x2={Math.max(chartWidth - chartAxisLabelWidth, 0)}
                 y1={chartHeight - chartInsetBottom}
                 y2={chartHeight - chartInsetBottom}
-                stroke="rgba(255,255,255,0.08)"
+                stroke="rgba(255,255,255,0.18)"
                 strokeWidth={1}
               />
 
+              {xAxisTicks.map((tick) => (
+                <SvgText
+                  key={`x-${tick.label}-${tick.x}`}
+                  x={tick.x}
+                  y={chartHeight - 6}
+                  fill="rgba(255,255,255,0.72)"
+                  fontSize={11}
+                  fontFamily={fontFamilies.regular}
+                  textAnchor="middle"
+                >
+                  {tick.label}
+                </SvgText>
+              ))}
+
               {activeCoordinates ? (
-                <>
+                <G>
                   <Line
                     x1={activeCoordinates.x}
                     x2={activeCoordinates.x}
-                    y1={14}
+                    y1={chartInsetTop}
                     y2={chartHeight - chartInsetBottom}
-                    stroke="rgba(255,255,255,0.24)"
+                    stroke="rgba(255,255,255,0.22)"
                     strokeWidth={1}
                     strokeDasharray="4 4"
                   />
@@ -693,30 +894,25 @@ export function AssetSummaryCard({
                     r={4.5}
                     fill={activeSegment.accentColor}
                   />
-                </>
+                </G>
               ) : null}
             </Svg>
           ) : (
             <View style={styles.emptyChartState}>
-              <Ionicons name="analytics-outline" size={22} color="rgba(255,255,255,0.7)" />
-              <Text style={styles.emptyChartTitle}>历史数据不足</Text>
+              <Ionicons name="analytics-outline" size={20} color="rgba(255,255,255,0.7)" />
+              <Text style={styles.emptyChartTitle}>Not enough history</Text>
               <Text style={styles.emptyChartText}>
-                {activeSegment.key === 'overview'
-                  ? '当前仅展示已保存的真实快照；至少需要两天数据后才会显示收益曲线。'
-                  : '当前只对总览提供真实历史曲线，分类分段暂未记录独立快照。'}
+                Add at least two portfolio snapshots to render the return curve.
               </Text>
             </View>
           )}
         </Animated.View>
-
-        {!scrubbing && hasSufficientHistory ? (
-          <Text style={styles.dragHint}>按住图表左右拖动，可查看精确日期与金额</Text>
-        ) : null}
       </View>
 
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.rangeTabsShell}
         contentContainerStyle={styles.rangeTabs}
       >
         {rangeOptions.map((option) => {
@@ -729,7 +925,7 @@ export function AssetSummaryCard({
               style={[
                 styles.rangeChip,
                 active ? styles.rangeChipActive : null,
-                active ? { borderColor: `${activeSegment.accentColor}77` } : null,
+                active ? { borderColor: `${activeSegment.accentColor}88` } : null,
               ]}
             >
               <Text style={[styles.rangeChipText, active ? styles.rangeChipTextActive : null]}>
@@ -739,122 +935,118 @@ export function AssetSummaryCard({
           );
         })}
       </ScrollView>
-
-      <View style={styles.footerMetrics}>
-        <View style={styles.footerMetric}>
-          <Text style={styles.footerMetricLabel}>累计收益</Text>
-          <Text
-            style={[
-              styles.footerMetricValue,
-              visibleCumulative >= 0 ? styles.positive : styles.negative,
-            ]}
-          >
-            {formatSignedCurrency(visibleCumulative, currency, 0)}
-          </Text>
-        </View>
-        <View style={styles.footerMetric}>
-          <Text style={styles.footerMetricLabel}>收益率</Text>
-          <Text style={styles.footerMetricValue}>{formatPercent(visibleCumulativeRate)}</Text>
-        </View>
-        <View style={styles.footerMetric}>
-          <Text style={styles.footerMetricLabel}>最近更新</Text>
-          <Text style={styles.footerMetricValue}>{formatDateTime(activeSegment.lastUpdated)}</Text>
-        </View>
-      </View>
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: radius.xl,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xl + spacing.xs,
+    borderRadius: 28,
+    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 14,
     overflow: 'hidden',
-    gap: spacing.lg,
+    gap: 10,
   },
-  topRow: {
+  headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  summaryBlock: {
-    flex: 1,
-    gap: spacing.sm,
-  },
-  eyebrow: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.70)',
+    alignItems: 'flex-start',
+    gap: 8,
   },
   value: {
+    flex: 1,
+    minWidth: 0,
     fontFamily: fontFamilies.bold,
-    fontSize: 34,
-    lineHeight: 40,
-    letterSpacing: -0.8,
+    fontSize: 29,
+    lineHeight: 36,
     color: colors.white,
   },
-  performanceRow: {
+  headerMetrics: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing.sm,
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 5,
   },
-  performanceValue: {
-    fontFamily: fontFamilies.semibold,
-    fontSize: 15,
+  headerMetric: {
+    gap: 3,
   },
-  performanceLabel: {
+  totalReturnMetric: {
+    minWidth: 106,
+    maxWidth: 116,
+  },
+  todayMetric: {
+    minWidth: 68,
+    maxWidth: 76,
+  },
+  headerMetricLabel: {
     fontFamily: fontFamilies.regular,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.72)',
+    fontSize: 10,
+    lineHeight: 12,
+    color: 'rgba(255,255,255,0.78)',
   },
-  analyticsButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  headerMetricValue: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  totalReturnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratePill: {
+    minHeight: 18,
+    paddingHorizontal: 5,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.10)',
+  },
+  ratePillText: {
+    fontFamily: fontFamilies.semibold,
+    fontSize: 9,
+    color: '#9BE4BF',
+  },
+  headerDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: 'rgba(255,255,255,0.16)',
   },
   segmentTabs: {
-    gap: spacing.sm,
+    gap: 8,
     paddingRight: spacing.md,
   },
   segmentChip: {
-    minHeight: 42,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    minHeight: 32,
+    paddingVertical: 5,
+    paddingHorizontal: 7,
     borderRadius: radius.pill,
     backgroundColor: 'rgba(255,255,255,0.06)',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: 7,
     borderWidth: 1,
   },
   segmentChipActive: {
-    paddingRight: 16,
+    paddingRight: 12,
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
   segmentIconWrap: {
-    width: 24,
-    height: 24,
+    width: 20,
+    height: 20,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
   segmentChipText: {
     fontFamily: fontFamilies.semibold,
-    fontSize: 14,
+    fontSize: 12,
     color: colors.white,
   },
   chartWrap: {
-    minHeight: chartHeight + 36,
+    minHeight: chartHeight + 18,
     justifyContent: 'flex-end',
-    paddingTop: 36,
+    paddingTop: 18,
   },
   chartReveal: {
     overflow: 'hidden',
@@ -864,90 +1056,70 @@ const styles = StyleSheet.create({
     minHeight: chartHeight,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.xs,
   },
   emptyChartTitle: {
     fontFamily: fontFamilies.semibold,
-    fontSize: 15,
+    fontSize: 14,
     color: colors.white,
   },
   emptyChartText: {
     textAlign: 'center',
     fontFamily: fontFamilies.regular,
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 17,
     color: 'rgba(255,255,255,0.72)',
   },
   floatingDateBadge: {
     position: 'absolute',
     top: 0,
-    minHeight: 30,
-    paddingHorizontal: spacing.md,
+    minHeight: 26,
+    paddingHorizontal: spacing.sm,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.20)',
+    zIndex: 2,
   },
   floatingDateText: {
     fontFamily: fontFamilies.medium,
-    fontSize: 11,
+    fontSize: 10,
     color: colors.white,
   },
-  dragHint: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 6,
-    textAlign: 'center',
-    fontFamily: fontFamilies.regular,
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.62)',
+  rangeTabsShell: {
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.09)',
   },
   rangeTabs: {
-    gap: spacing.sm,
-    paddingRight: spacing.md,
+    flexGrow: 1,
+    justifyContent: 'space-between',
+    padding: 4,
+    gap: 4,
   },
   rangeChip: {
+    minWidth: 48,
     minHeight: 34,
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     borderRadius: radius.pill,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'transparent',
   },
   rangeChipActive: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(84,154,230,0.28)',
   },
   rangeChipText: {
     fontFamily: fontFamilies.medium,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.68)',
+    color: 'rgba(255,255,255,0.72)',
   },
   rangeChipTextActive: {
-    color: colors.white,
-  },
-  footerMetrics: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  footerMetric: {
-    flex: 1,
-    gap: spacing.xs,
-  },
-  footerMetricLabel: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.65)',
-  },
-  footerMetricValue: {
-    fontFamily: fontFamilies.semibold,
-    fontSize: 14,
     color: colors.white,
   },
   positive: {

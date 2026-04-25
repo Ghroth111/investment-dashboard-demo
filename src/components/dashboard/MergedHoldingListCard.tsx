@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { AggregatedAssetItem, AssetGroupSection } from '../../features/assets/selectors';
-import { colors, fontFamilies, spacing } from '../../theme';
+import { colors, fontFamilies, radius, spacing } from '../../theme';
 import type { CurrencyCode } from '../../types/models';
 import { formatCurrency, formatPercent, formatSignedCurrency } from '../../utils/formatters';
 
@@ -13,12 +13,26 @@ interface MergedHoldingListCardProps {
 
 const logoPalettes = [
   { background: '#D73B2D', text: '#FFFFFF' },
-  { background: '#8ABF34', text: '#FFFFFF' },
-  { background: '#F59E0B', text: '#FFFFFF' },
   { background: '#2563EB', text: '#FFFFFF' },
-  { background: '#0F766E', text: '#FFFFFF' },
+  { background: '#8ABF34', text: '#FFFFFF' },
   { background: '#7C3AED', text: '#FFFFFF' },
+  { background: '#0F766E', text: '#FFFFFF' },
+  { background: '#64748B', text: '#FFFFFF' },
 ];
+
+const companyNameOverrides: Record<string, string> = {
+  AMD: 'AMD',
+  MSFT: 'Microsoft',
+  INTC: 'Intel',
+  UNH: 'UnitedHealth',
+  AAPL: 'Apple',
+  NVDA: 'NVIDIA',
+  TSLA: 'Tesla',
+  SPY: 'SPDR S&P 500 ETF',
+  BTC: 'Bitcoin',
+  ETH: 'Ethereum',
+  SOL: 'Solana',
+};
 
 function getLogoPalette(asset: AggregatedAssetItem) {
   const seed = `${asset.symbol}${asset.name}`
@@ -42,6 +56,21 @@ function getSymbolMark(asset: AggregatedAssetItem) {
   return asset.name.trim().slice(0, 1).toUpperCase();
 }
 
+function getDisplayName(asset: AggregatedAssetItem) {
+  const symbol = asset.symbol.trim().toUpperCase();
+  const normalizedName = asset.name.trim();
+
+  if (companyNameOverrides[symbol]) {
+    return companyNameOverrides[symbol];
+  }
+
+  if (/[\u3400-\u9FFF]/.test(normalizedName)) {
+    return symbol || 'Holding';
+  }
+
+  return normalizedName || symbol || 'Holding';
+}
+
 function formatShares(quantity: number) {
   if (quantity % 1 === 0) {
     return `${quantity}`;
@@ -50,12 +79,18 @@ function formatShares(quantity: number) {
   return `${quantity.toFixed(2)}`;
 }
 
+function formatAllocationPercent(value: number) {
+  return `${Math.max(0, value * 100).toFixed(2)}%`;
+}
+
 export function MergedHoldingListCard({
   sections,
   currency,
   onAssetPress,
 }: MergedHoldingListCardProps) {
-  const allAssets = sections.flatMap((section) => section.items);
+  const allAssets = sections
+    .flatMap((section) => section.items)
+    .sort((left, right) => right.marketValue - left.marketValue);
   const totalMarketValue = allAssets.reduce((sum, asset) => sum + asset.marketValue, 0);
 
   return (
@@ -72,85 +107,65 @@ export function MergedHoldingListCard({
         </View>
       </View>
 
-      {allAssets.map((asset) => {
-        const weight = totalMarketValue > 0 ? asset.marketValue / totalMarketValue : 0;
-        const isPositive = asset.pnl >= 0;
-        const palette = getLogoPalette(asset);
+      <View style={styles.list}>
+        {allAssets.map((asset) => {
+          const displayName = getDisplayName(asset);
+          const isPositive = asset.pnl >= 0;
+          const palette = getLogoPalette(asset);
+          const allocation = totalMarketValue === 0 ? 0 : asset.marketValue / totalMarketValue;
 
-        return (
-          <Pressable
-            key={asset.assetKey}
-            onPress={() => onAssetPress(asset.assetKey)}
-            style={({ pressed }) => [
-              styles.row,
-              pressed ? styles.rowPressed : null,
-              asset !== allAssets[allAssets.length - 1] ? styles.rowBorder : null,
-            ]}
-          >
-            <View style={styles.content}>
+          return (
+            <Pressable
+              key={asset.assetKey}
+              onPress={() => onAssetPress(asset.assetKey)}
+              style={({ pressed }) => [styles.row, pressed ? styles.rowPressed : null]}
+            >
               <View style={styles.topRow}>
                 <View style={[styles.logoBadge, { backgroundColor: palette.background }]}>
                   <Text style={[styles.logoText, { color: palette.text }]}>{getSymbolMark(asset)}</Text>
                 </View>
 
-                <View style={styles.identityBlock}>
+                <View style={styles.mainColumn}>
                   <Text style={styles.nameText} numberOfLines={1}>
-                    {asset.name}
+                    {displayName}
                   </Text>
                   <Text style={styles.codeText} numberOfLines={1}>
-                    {asset.symbol}
+                    {asset.symbol} / {formatShares(asset.quantity)}
                   </Text>
+                  <View style={styles.priceStack}>
+                    <Text style={styles.priceLine} numberOfLines={1}>
+                      Price {formatCurrency(asset.currentPrice, currency, 2)}
+                    </Text>
+                    <Text style={styles.priceLine} numberOfLines={1}>
+                      Cost {formatCurrency(asset.costBasis, currency, 2)}
+                    </Text>
+                  </View>
                 </View>
 
-                <View style={styles.weightTag}>
-                  <Text style={styles.weightText}>{formatPercent(weight)}</Text>
-                </View>
-              </View>
-
-              <View style={styles.metricsRow}>
-                <View style={styles.pnlBlock}>
-                  <Text style={[styles.pnlAmount, isPositive ? styles.positive : styles.negative]}>
-                    {formatSignedCurrency(asset.pnl, currency, 2)}
-                  </Text>
-                  <Text style={[styles.pnlRate, isPositive ? styles.positive : styles.negative]}>
-                    {formatPercent(asset.pnlRate)}
-                  </Text>
-                </View>
-
-                <View style={styles.valueBlock}>
-                  <Text style={styles.marketValueText}>
+                <View style={styles.rightColumn}>
+                  <View style={styles.allocationTag}>
+                    <Text style={styles.allocationText}>
+                      {formatAllocationPercent(allocation)}
+                    </Text>
+                  </View>
+                  <Text style={styles.marketValueText} numberOfLines={1} adjustsFontSizeToFit>
                     {formatCurrency(asset.marketValue, currency, 2)}
                   </Text>
-                  <Text style={styles.quantityText}>{formatShares(asset.quantity)}</Text>
                 </View>
               </View>
 
-              <View style={styles.footerRow}>
-                <View style={styles.footerMetric}>
-                  <Text style={styles.footerLabel}>Price</Text>
-                  <Text style={styles.footerValue}>{formatCurrency(asset.currentPrice, currency, 2)}</Text>
-                </View>
-
-                <View style={styles.footerDivider} />
-
-                <View style={styles.footerMetric}>
-                  <Text style={styles.footerLabel}>Cost</Text>
-                  <Text style={styles.footerValue}>{formatCurrency(asset.costBasis, currency, 2)}</Text>
-                </View>
-
-                <View style={styles.footerDivider} />
-
-                <View style={styles.footerMetricGrow}>
-                  <Text style={styles.footerLabel}>Accounts</Text>
-                  <Text style={styles.footerValue} numberOfLines={1}>
-                    {asset.accountCount}
-                  </Text>
-                </View>
+              <View style={styles.returnRow}>
+                <Text style={[styles.pnlAmount, isPositive ? styles.positive : styles.negative]} numberOfLines={1}>
+                  {formatSignedCurrency(asset.pnl, currency, 2)}
+                </Text>
+                <Text style={[styles.pnlRate, isPositive ? styles.positive : styles.negative]} numberOfLines={1}>
+                  {formatPercent(asset.pnlRate)}
+                </Text>
               </View>
-            </View>
-          </Pressable>
-        );
-      })}
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -158,19 +173,16 @@ export function MergedHoldingListCard({
 const styles = StyleSheet.create({
   container: {
     gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xs,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    marginTop: spacing.xs,
+    gap: spacing.md,
   },
   eyebrow: {
     fontFamily: fontFamilies.medium,
     fontSize: 11,
-    letterSpacing: 1.2,
     textTransform: 'uppercase',
     color: '#7C8CA1',
   },
@@ -194,144 +206,123 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textMuted,
   },
+  list: {
+    gap: spacing.md,
+  },
   row: {
-    paddingVertical: spacing.lg,
+    borderWidth: 1,
+    borderColor: '#E5ECF4',
+    borderRadius: 26,
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    shadowColor: '#10233B',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.07,
+    shadowRadius: 18,
+    elevation: 2,
   },
   rowPressed: {
-    opacity: 0.78,
-  },
-  rowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#E4EBF3',
-  },
-  content: {
-    gap: spacing.md,
+    opacity: 0.82,
   },
   topRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.sm,
   },
   logoBadge: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 3,
     shadowColor: '#10233B',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.16,
+    shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 2,
   },
   logoText: {
     fontFamily: fontFamilies.semibold,
-    fontSize: 17,
-    letterSpacing: 0.6,
+    fontSize: 12,
   },
-  identityBlock: {
+  mainColumn: {
     flex: 1,
-    gap: 2,
+    minWidth: 0,
+    gap: 3,
   },
   nameText: {
     fontFamily: fontFamilies.semibold,
-    fontSize: 20,
-    lineHeight: 24,
-    color: '#17293F',
+    fontSize: 16,
+    lineHeight: 20,
+    color: '#12243C',
   },
   codeText: {
     fontFamily: fontFamilies.regular,
-    fontSize: 15,
-    lineHeight: 20,
-    color: '#8997AB',
+    fontSize: 13,
+    lineHeight: 17,
+    color: '#7586A3',
   },
-  weightTag: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#F4F7FB',
+  priceLine: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 10,
+    lineHeight: 13,
+    color: '#7586A3',
   },
-  weightText: {
+  priceStack: {
+    gap: 1,
+  },
+  rightColumn: {
+    width: 134,
+    alignItems: 'flex-end',
+    gap: spacing.xs,
+  },
+  allocationTag: {
+    minHeight: 28,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.positiveSoft,
+  },
+  allocationText: {
     fontFamily: fontFamilies.medium,
     fontSize: 12,
-    color: '#6D7C91',
-  },
-  metricsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    gap: spacing.md,
-  },
-  pnlBlock: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  valueBlock: {
-    minWidth: 140,
-    alignItems: 'flex-end',
-    justifyContent: 'flex-end',
-  },
-  pnlAmount: {
-    fontFamily: fontFamilies.semibold,
-    fontSize: 18,
-    lineHeight: 24,
-  },
-  pnlRate: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 4,
+    lineHeight: 16,
+    color: colors.positive,
   },
   marketValueText: {
     fontFamily: fontFamilies.semibold,
-    fontSize: 28,
-    lineHeight: 34,
-    color: '#17293F',
+    fontSize: 24,
+    lineHeight: 33,
+    color: '#0D1F39',
     textAlign: 'right',
   },
-  quantityText: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 16,
-    lineHeight: 22,
-    color: '#90A0B4',
-    marginTop: 4,
-  },
-  footerRow: {
+  returnRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: '#EEF3F8',
-    paddingTop: spacing.md,
+    borderTopColor: '#E8EEF5',
   },
-  footerMetric: {
-    gap: 4,
-  },
-  footerMetricGrow: {
+  pnlAmount: {
     flex: 1,
-    gap: 4,
-  },
-  footerLabel: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#97A5B8',
-  },
-  footerValue: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 13,
+    fontFamily: fontFamilies.semibold,
+    fontSize: 14,
     lineHeight: 18,
-    color: '#506076',
   },
-  footerDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: '#EEF3F8',
+  pnlRate: {
+    textAlign: 'right',
+    fontFamily: fontFamilies.medium,
+    fontSize: 14,
+    lineHeight: 18,
   },
   positive: {
-    color: '#EC5B5A',
+    color: colors.positive,
   },
   negative: {
-    color: '#4AAA74',
+    color: colors.negative,
   },
 });
