@@ -61,7 +61,7 @@ export function LoginScreen() {
           <Text style={styles.brand}>衡策资产</Text>
           <Text style={styles.heroTitle}>统一管理你的投资资产</Text>
           <Text style={styles.heroDescription}>
-            登录后即可查看账户、持仓、收益表现和平台分布。
+            资产数据保存在本机，后端仅用于获取标的行情。
           </Text>
         </View>
         <View style={styles.pillRow}>
@@ -72,7 +72,7 @@ export function LoginScreen() {
             <Text style={styles.pillText}>多币种支持</Text>
           </View>
           <View style={styles.pill}>
-            <Text style={styles.pillText}>安全登录</Text>
+            <Text style={styles.pillText}>本地存储</Text>
           </View>
         </View>
       </View>
@@ -81,8 +81,8 @@ export function LoginScreen() {
         <Text style={styles.formTitle}>{isRegisterMode ? '创建账户' : '登录账户'}</Text>
         <Text style={styles.formDescription}>
           {isRegisterMode
-            ? '注册后即可开始添加账户、录入持仓并建立自己的资产视图。'
-            : '继续登录，回到你的投资总览。'}
+            ? '创建一个仅保存在当前设备上的本地账户。'
+            : '进入当前设备上的本地资产空间。'}
         </Text>
 
         {isRegisterMode ? (

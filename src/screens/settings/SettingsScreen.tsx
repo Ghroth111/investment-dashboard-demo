@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { AppScreen } from '../../components/layout/AppScreen';
-import { Button } from '../../components/ui/Button';
 import { SegmentedControl } from '../../components/ui/SegmentedControl';
 import { SurfaceCard } from '../../components/ui/SurfaceCard';
 import { baseCurrencyOptions } from '../../mock';
@@ -13,14 +12,13 @@ export function SettingsScreen() {
   const user = useDemoStore((state) => state.user);
   const exchangeRates = useDemoStore((state) => state.exchangeRates);
   const setBaseCurrency = useDemoStore((state) => state.setBaseCurrency);
-  const logout = useDemoStore((state) => state.logout);
   const [themeMode, setThemeMode] = useState('light');
 
   return (
     <AppScreen>
       <View style={styles.header}>
         <Text style={styles.title}>我的</Text>
-        <Text style={styles.description}>管理显示币种、界面偏好和账户安全设置。</Text>
+        <Text style={styles.description}>管理显示币种、界面偏好和本机数据设置。</Text>
       </View>
 
       <SurfaceCard style={styles.profileCard}>
@@ -71,12 +69,10 @@ export function SettingsScreen() {
 
       <SurfaceCard style={styles.card}>
         <Text style={styles.sectionTitle}>账户与数据</Text>
-        <Text style={styles.noteLine}>账户、持仓和流水会按照当前登录用户隔离展示。</Text>
-        <Text style={styles.noteLine}>建议优先接入只读权限，避免在资产同步场景中暴露高风险操作。</Text>
-        <Text style={styles.noteLine}>如更换设备，请先确认 API 权限、截图草稿和手动录入内容已经同步完成。</Text>
+        <Text style={styles.noteLine}>账户、持仓、流水和图表快照都保存在当前设备。</Text>
+        <Text style={styles.noteLine}>行情查询只会发送标的代码，不会上传数量、成本或账户信息。</Text>
+        <Text style={styles.noteLine}>如更换设备，请先完成本地备份或后续的加密同步。</Text>
       </SurfaceCard>
-
-      <Button label="退出登录" onPress={logout} variant="danger" icon="log-out-outline" />
     </AppScreen>
   );
 }

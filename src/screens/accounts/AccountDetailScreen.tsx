@@ -65,11 +65,9 @@ export function AccountDetailScreen({
   const exchangeRates = useDemoStore((state) => state.exchangeRates);
   const accounts = useDemoStore((state) => state.accounts);
   const deleteAccount = useDemoStore((state) => state.deleteAccount);
-  const loadAccounts = useDemoStore((state) => state.loadAccounts);
+  const lastPriceSyncAt = useDemoStore((state) => state.lastPriceSyncAt);
   const account = accounts.find((item) => item.id === route.params.accountId);
-  const [refreshing, setRefreshing] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [refreshNote, setRefreshNote] = useState('');
 
   if (!account) {
     return (
@@ -137,26 +135,6 @@ export function AccountDetailScreen({
       );
     } finally {
       setDeleting(false);
-    }
-  }
-
-  async function handleRefresh() {
-    if (refreshing) {
-      return;
-    }
-
-    try {
-      setRefreshing(true);
-      setRefreshNote('');
-      await loadAccounts();
-      setRefreshNote(`Last refresh completed at ${formatDateTime(new Date().toISOString())}`);
-    } catch (error) {
-      Alert.alert(
-        'Refresh Failed',
-        error instanceof Error ? error.message : 'Unable to refresh account data right now.',
-      );
-    } finally {
-      setRefreshing(false);
     }
   }
 
@@ -245,16 +223,6 @@ export function AccountDetailScreen({
         <Text style={styles.sectionTitle}>Account Actions</Text>
         <View style={styles.actionButtons}>
           <Button
-            label={refreshing ? 'Refreshing...' : 'Refresh Data'}
-            onPress={() => {
-              void handleRefresh();
-            }}
-            variant="secondary"
-            icon="refresh-outline"
-            style={styles.actionButton}
-            disabled={refreshing}
-          />
-          <Button
             label="Add Transaction"
             onPress={() => navigation.navigate('AddTransaction')}
             variant="ghost"
@@ -273,10 +241,10 @@ export function AccountDetailScreen({
           />
         </View>
 
-        {refreshNote ? (
+        {lastPriceSyncAt ? (
           <View style={styles.refreshBanner}>
-            <Ionicons name="checkmark-circle-outline" size={16} color={colors.positive} />
-            <Text style={styles.refreshText}>{refreshNote}</Text>
+            <Ionicons name="time-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.refreshText}>Last price sync: {formatDateTime(lastPriceSyncAt)}</Text>
           </View>
         ) : null}
       </SurfaceCard>

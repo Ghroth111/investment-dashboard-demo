@@ -114,6 +114,24 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+function normalizeHistoryTimestamp(timestamp?: string) {
+  if (!timestamp) {
+    return new Date().toISOString();
+  }
+
+  const parsed = new Date(timestamp);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString();
+  }
+
+  const dateOnly = new Date(`${timestamp}T00:00:00.000Z`);
+  if (!Number.isNaN(dateOnly.getTime())) {
+    return dateOnly.toISOString();
+  }
+
+  return new Date().toISOString();
+}
+
 function formatSummaryDate(timestamp: string, range: PerformanceRange) {
   const date = new Date(timestamp);
 
@@ -227,9 +245,7 @@ function buildOverviewPerformanceSeries(
       const gain = value - baseValue;
 
       return {
-        timestamp: point.timestamp
-          ? new Date(`${point.timestamp}T00:00:00.000Z`).toISOString()
-          : new Date().toISOString(),
+        timestamp: normalizeHistoryTimestamp(point.timestamp),
         value,
         gain,
         gainRate: baseValue === 0 ? 0 : gain / baseValue,

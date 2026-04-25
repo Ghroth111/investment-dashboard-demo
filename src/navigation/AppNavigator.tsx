@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   Modal,
   Pressable,
@@ -112,7 +113,7 @@ function AddActionModal({
 
 function MainTabs() {
   const [addActionVisible, setAddActionVisible] = useState(false);
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const handleAddClose = useCallback(
     (action?: 'manual' | 'screenshot') => {

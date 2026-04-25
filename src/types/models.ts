@@ -120,6 +120,14 @@ export interface PerformancePoint {
 
 export type PerformanceSeries = Record<PerformanceRange, PerformancePoint[]>;
 
+export interface HoldingSnapshotPoint {
+  timestamp: string;
+  priceUsd: number;
+  valueUsd: number;
+  costValueUsd: number;
+  quantity: number;
+}
+
 export interface HoldingTrade {
   id: string;
   assetKey: string;

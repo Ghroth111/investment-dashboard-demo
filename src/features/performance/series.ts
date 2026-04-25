@@ -4,6 +4,7 @@ import type {
   CurrencyCode,
   ExchangeRates,
   Holding,
+  HoldingSnapshotPoint,
   PerformancePoint,
   PerformanceRange,
   PerformanceSeries,
@@ -255,4 +256,57 @@ export function buildAccountsPerformanceSeries(
       aggregate.currentValue === 0 ? 0 : aggregate.todayChange / aggregate.currentValue,
     updatedAt: aggregate.updatedAt,
   });
+}
+
+function mapSnapshotRange(range: PerformanceRange, snapshots: HoldingSnapshotPoint[]) {
+  const lastTimestamp = new Date(snapshots.at(-1)?.timestamp ?? Date.now()).getTime();
+  const yearStart = new Date(new Date(lastTimestamp).getFullYear(), 0, 1).getTime();
+
+  switch (range) {
+    case '7D':
+      return snapshots.filter((point) => new Date(point.timestamp).getTime() >= lastTimestamp - 7 * dayMs);
+    case '1M':
+      return snapshots.filter((point) => new Date(point.timestamp).getTime() >= lastTimestamp - 30 * dayMs);
+    case '6M':
+      return snapshots.filter((point) => new Date(point.timestamp).getTime() >= lastTimestamp - 182 * dayMs);
+    case 'YTD':
+      return snapshots.filter((point) => new Date(point.timestamp).getTime() >= yearStart);
+    case '1Y':
+      return snapshots.filter((point) => new Date(point.timestamp).getTime() >= lastTimestamp - 365 * dayMs);
+    case 'ALL':
+    default:
+      return snapshots;
+  }
+}
+
+export function buildHoldingSnapshotPerformanceSeries(
+  snapshots: HoldingSnapshotPoint[],
+  baseCurrency: CurrencyCode,
+  rates: ExchangeRates,
+) {
+  if (snapshots.length < 2) {
+    return createEmptyPerformanceSeries();
+  }
+
+  return (['7D', '1M', '6M', 'YTD', '1Y', 'ALL'] as PerformanceRange[]).reduce<PerformanceSeries>(
+    (series, range) => {
+      const rangePoints = mapSnapshotRange(range, snapshots);
+
+      series[range] = rangePoints.map<PerformancePoint>((point) => {
+        const value = convertAmount(point.valueUsd, 'USD', baseCurrency, rates);
+        const costValue = convertAmount(point.costValueUsd, 'USD', baseCurrency, rates);
+        const gain = value - costValue;
+
+        return {
+          timestamp: point.timestamp,
+          value,
+          gain,
+          gainRate: costValue === 0 ? 0 : gain / costValue,
+        };
+      });
+
+      return series;
+    },
+    createEmptyPerformanceSeries(),
+  );
 }

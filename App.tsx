@@ -9,10 +9,13 @@ import {
 } from '@expo-google-fonts/ibm-plex-sans';
 import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppNavigator } from './src/navigation/AppNavigator';
+import { useDemoStore } from './src/store/demoStore';
 import { navigationTheme } from './src/theme';
 
 export default function App() {
@@ -22,6 +25,28 @@ export default function App() {
     IBMPlexSans_600SemiBold,
     IBMPlexSans_700Bold,
   });
+  const phase = useDemoStore((state) => state.phase);
+  const refreshPricesIfNeeded = useDemoStore((state) => state.refreshPricesIfNeeded);
+
+  useEffect(() => {
+    if (phase !== 'app') {
+      return;
+    }
+
+    void refreshPricesIfNeeded();
+  }, [phase, refreshPricesIfNeeded]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void refreshPricesIfNeeded();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [refreshPricesIfNeeded]);
 
   if (!fontsLoaded) {
     return null;

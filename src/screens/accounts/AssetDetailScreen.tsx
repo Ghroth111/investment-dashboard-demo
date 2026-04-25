@@ -7,7 +7,7 @@ import { AppScreen } from '../../components/layout/AppScreen';
 import { ErrorState } from '../../components/states/ErrorState';
 import { SurfaceCard } from '../../components/ui/SurfaceCard';
 import { getAssetSnapshot, getAssetClassLabel, getHoldingAssetKey } from '../../features/assets/selectors';
-import { createEmptyPerformanceSeries } from '../../features/performance/series';
+import { buildHoldingSnapshotPerformanceSeries } from '../../features/performance/series';
 import type { RootStackScreenProps } from '../../navigation/types';
 import { useDemoStore } from '../../store/demoStore';
 import { colors, fontFamilies, spacing } from '../../theme';
@@ -26,6 +26,7 @@ export function AssetDetailScreen({
   const exchangeRates = useDemoStore((state) => state.exchangeRates);
   const accounts = useDemoStore((state) => state.accounts);
   const holdingTrades = useDemoStore((state) => state.holdingTrades);
+  const holdingSnapshots = useDemoStore((state) => state.holdingSnapshots);
   const accountFromRoute = 'accountId' in route.params ? route.params.accountId : undefined;
   const holdingIdFromRoute = 'holdingId' in route.params ? route.params.holdingId : undefined;
 
@@ -63,7 +64,10 @@ export function AssetDetailScreen({
     account && primaryPosition
       ? account.holdings.find((item) => item.id === primaryPosition.holdingId)
       : undefined;
-  const performanceSeries = useMemo(() => createEmptyPerformanceSeries(), []);
+  const performanceSeries = useMemo(
+    () => buildHoldingSnapshotPerformanceSeries(holdingSnapshots[assetKey] ?? [], user.baseCurrency, exchangeRates),
+    [assetKey, exchangeRates, holdingSnapshots, user.baseCurrency],
+  );
 
   const assetTrades = holdingTrades
     .filter((trade) => trade.assetKey === assetKey)
@@ -92,7 +96,7 @@ export function AssetDetailScreen({
         currency={user.baseCurrency}
         series={performanceSeries}
         defaultRange="YTD"
-        emptyMessage="持仓详情页当前不再编造收益曲线；等后端记录到持仓级真实历史后，这里会显示真实走势。"
+        emptyMessage="持仓快照还不够多；每天记录更多价格后，这里会显示真实走势。"
       />
 
       <SurfaceCard style={styles.card}>

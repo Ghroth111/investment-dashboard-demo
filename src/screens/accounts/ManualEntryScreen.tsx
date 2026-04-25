@@ -226,7 +226,6 @@ function HoldingEditorCard({
 
       onChange({
         currentPrice: formatLivePrice(quote.price),
-        costBasis: holding.costBasis || formatLivePrice(quote.price),
         exchange: overrides?.exchange || holding.exchange,
         micCode: overrides?.micCode || holding.micCode,
         country: overrides?.country || holding.country,
