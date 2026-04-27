@@ -96,15 +96,10 @@ export function MergedHoldingListCard({
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.eyebrow}>Portfolio</Text>
-          <Text style={styles.title}>Holdings</Text>
-        </View>
-
-        <View style={styles.headerMeta}>
+        {/* <View style={styles.headerMeta}>
           <Text style={styles.headerValue}>{allAssets.length} Items</Text>
           <Text style={styles.headerHint}>Sorted by market value</Text>
-        </View>
+        </View> */}
       </View>
 
       <View style={styles.list}>

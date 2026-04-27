@@ -1,13 +1,11 @@
 import { useState } from 'react';
-import { Alert } from 'react-native';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { MergedHoldingListCard } from '../../components/dashboard/MergedHoldingListCard';
 import { AssetSummaryCard } from '../../components/dashboard/AssetSummaryCard';
 import { CompactAccountCard } from '../../components/dashboard/CompactAccountCard';
 import { AppScreen } from '../../components/layout/AppScreen';
 import { EmptyState } from '../../components/states/EmptyState';
-import { Button } from '../../components/ui/Button';
 import { SurfaceCard } from '../../components/ui/SurfaceCard';
 import { buildAggregatedAssets, groupAssetsByClass } from '../../features/assets/selectors';
 import { getTopAccounts } from '../../features/dashboard/selectors';
@@ -25,7 +23,6 @@ export function DashboardScreen({ navigation }: AppTabScreenProps<'Dashboard'>) 
   const lastPriceSyncAt = useDemoStore((state) => state.lastPriceSyncAt);
   const [accountsExpanded, setAccountsExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [refreshNote, setRefreshNote] = useState('');
 
   if (accounts.length === 0) {
     return (
@@ -52,14 +49,7 @@ export function DashboardScreen({ navigation }: AppTabScreenProps<'Dashboard'>) 
 
     try {
       setRefreshing(true);
-      setRefreshNote('');
-      const result = await refreshPrices({ force: true });
-      const refreshedAt = result.syncedAt ?? new Date().toISOString();
-      setRefreshNote(
-        result.refreshedCount > 0
-          ? `Updated ${result.refreshedCount} holdings at ${formatDateTime(refreshedAt)}`
-          : `No eligible holdings were refreshed. Checked at ${formatDateTime(refreshedAt)}`,
-      );
+      await refreshPrices({ force: true });
     } catch (error) {
       Alert.alert(
         'Refresh Failed',
@@ -71,30 +61,7 @@ export function DashboardScreen({ navigation }: AppTabScreenProps<'Dashboard'>) 
   }
 
   return (
-    <AppScreen>
-      <SurfaceCard style={styles.refreshCard}>
-        <View style={styles.refreshHeader}>
-          <View style={styles.refreshCopy}>
-            <Text style={styles.refreshTitle}>Price Sync</Text>
-            <Text style={styles.refreshSubtitle}>
-              {refreshNote ||
-                (lastPriceSyncAt
-                  ? `Last sync: ${formatDateTime(lastPriceSyncAt)}`
-                  : 'No price sync has run yet.')}
-            </Text>
-          </View>
-          <Button
-            label={refreshing ? 'Refreshing...' : 'Refresh Prices'}
-            onPress={() => {
-              void handleRefreshPrices();
-            }}
-            variant="secondary"
-            icon="refresh-outline"
-            disabled={refreshing}
-          />
-        </View>
-      </SurfaceCard>
-
+    <AppScreen refreshing={refreshing} onRefresh={handleRefreshPrices}>
       <AssetSummaryCard
         accounts={accounts}
         currency={user.baseCurrency}
@@ -102,6 +69,14 @@ export function DashboardScreen({ navigation }: AppTabScreenProps<'Dashboard'>) 
         portfolioHistory={portfolioHistory}
         onAnalyticsPress={() => navigation.navigate('Accounts')}
       />
+
+      <View style={styles.syncRow}>
+        <Text style={styles.syncText}>
+          {lastPriceSyncAt
+            ? `Last sync: ${formatDateTime(lastPriceSyncAt)}`
+            : 'No price sync has run yet.'}
+        </Text>
+      </View>
 
       <MergedHoldingListCard
         sections={groupedAssets}
@@ -142,28 +117,14 @@ export function DashboardScreen({ navigation }: AppTabScreenProps<'Dashboard'>) 
 }
 
 const styles = StyleSheet.create({
-  refreshCard: {
-    gap: spacing.sm,
-  },
-  refreshHeader: {
+  syncRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: spacing.md,
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing.lg,
   },
-  refreshCopy: {
-    flex: 1,
-    gap: spacing.xs,
-  },
-  refreshTitle: {
-    fontFamily: fontFamilies.semibold,
-    fontSize: 16,
-    color: colors.text,
-  },
-  refreshSubtitle: {
+  syncText: {
     fontFamily: fontFamilies.regular,
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 12,
     color: colors.textMuted,
   },
   sectionTitle: {

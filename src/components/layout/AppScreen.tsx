@@ -1,18 +1,22 @@
-import { ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, spacing } from '../../theme';
+import { colors, fontFamilies, spacing } from '../../theme';
 
 interface AppScreenProps {
   children: React.ReactNode;
   scrollable?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }
 
 export function AppScreen({
   children,
   scrollable = true,
   contentStyle,
+  refreshing,
+  onRefresh,
 }: AppScreenProps) {
   const insets = useSafeAreaInsets();
 
@@ -35,7 +39,19 @@ export function AppScreen({
           contentContainerStyle={containerStyle}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
+          alwaysBounceVertical={true}
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
+            ) : undefined
+          }
         >
+          {refreshing ? (
+            <View style={styles.refreshBanner}>
+              <ActivityIndicator size="small" color={colors.accent} />
+              <Text style={styles.refreshText}>正在刷新…</Text>
+            </View>
+          ) : null}
           {children}
         </ScrollView>
       ) : (
@@ -72,5 +88,17 @@ const styles = StyleSheet.create({
     height: 220,
     borderRadius: 220,
     backgroundColor: 'rgba(33, 94, 160, 0.08)',
+  },
+  refreshBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  refreshText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 13,
+    color: colors.accent,
   },
 });

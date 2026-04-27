@@ -45,7 +45,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-type SegmentKey = 'overview' | AccountType;
+type SegmentKey = Exclude<AccountType, 'Manual'>;
 
 interface AssetSummaryCardProps {
   accounts: Account[];
@@ -100,12 +100,10 @@ const categoryMeta: Record<
     accentColor: string;
   }
 > = {
-  overview: { label: 'Overview', icon: 'grid-outline', accentColor: '#72D8FF' },
   Brokerage: { label: 'Brokerage', icon: 'stats-chart-outline', accentColor: '#7DE6D8' },
   Fund: { label: 'Fund', icon: 'pie-chart-outline', accentColor: '#A4E7C2' },
   Crypto: { label: 'Crypto', icon: 'logo-bitcoin', accentColor: '#70D4FF' },
   Cash: { label: 'Cash', icon: 'wallet-outline', accentColor: '#B0E7D4' },
-  Manual: { label: 'Manual', icon: 'create-outline', accentColor: '#B5CFF1' },
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -326,25 +324,10 @@ function buildCategorySegments(
     },
   );
 
-  const overviewMetrics = getAggregateMetrics(accounts, currency, exchangeRates);
   const overviewSeries = buildOverviewPerformanceSeries(portfolioHistory, currency, exchangeRates);
-  const orderedTypes: AccountType[] = ['Brokerage', 'Fund', 'Crypto', 'Cash', 'Manual'];
+  const orderedTypes: SegmentKey[] = ['Brokerage', 'Fund', 'Crypto', 'Cash'];
 
-  const segments: CategorySegment[] = [
-    {
-      key: 'overview',
-      ...categoryMeta.overview,
-      totalAssets: overviewMetrics.totalAssets,
-      cumulativeReturn: overviewMetrics.cumulativeReturn,
-      cumulativeReturnRate:
-        overviewMetrics.costBase === 0
-          ? 0
-          : overviewMetrics.cumulativeReturn / overviewMetrics.costBase,
-      todayChange: overviewMetrics.todayChange,
-      lastUpdated: overviewMetrics.lastUpdated,
-      series: overviewSeries,
-    },
-  ];
+  const segments: CategorySegment[] = [];
 
   orderedTypes.forEach((type) => {
     const bucket = groupedAccounts[type];
@@ -458,7 +441,8 @@ export function AssetSummaryCard({
 }: AssetSummaryCardProps) {
   const { width } = useWindowDimensions();
   const [range, setRange] = useState<PerformanceRange>('ALL');
-  const [activeSegmentKey, setActiveSegmentKey] = useState<SegmentKey>('overview');
+  const [activeSegmentKey, setActiveSegmentKey] = useState<SegmentKey>('Brokerage');
+  const [showPercentages, setShowPercentages] = useState(false);
   const [scrubbing, setScrubbing] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [chartWidth, setChartWidth] = useState(0);
@@ -477,11 +461,42 @@ export function AssetSummaryCard({
     () => buildCategorySegments(accounts, currency, exchangeRates, portfolioHistory),
     [accounts, currency, exchangeRates, portfolioHistory],
   );
+  const overviewMetrics = useMemo(
+    () => getAggregateMetrics(accounts, currency, exchangeRates),
+    [accounts, currency, exchangeRates],
+  );
+  const overviewSeries = useMemo(
+    () => buildOverviewPerformanceSeries(portfolioHistory, currency, exchangeRates),
+    [portfolioHistory, currency, exchangeRates],
+  );
+  const overviewSegment = useMemo<CategorySegment>(() => {
+    const costBase = Math.max(overviewMetrics.totalAssets - overviewMetrics.cumulativeReturn, 0);
+    return {
+      key: 'overview' as SegmentKey,
+      label: 'Overview',
+      icon: 'grid-outline' as keyof typeof Ionicons.glyphMap,
+      accentColor: '#72D8FF',
+      totalAssets: overviewMetrics.totalAssets,
+      cumulativeReturn: overviewMetrics.cumulativeReturn,
+      cumulativeReturnRate: costBase === 0 ? 0 : overviewMetrics.cumulativeReturn / costBase,
+      todayChange: overviewMetrics.todayChange,
+      lastUpdated: overviewMetrics.lastUpdated,
+      series: overviewSeries,
+    };
+  }, [overviewMetrics, overviewSeries]);
+
+  useEffect(() => {
+    if (segments.length > 0 && !segments.find((s) => s.key === activeSegmentKey)) {
+      setActiveSegmentKey(segments[0].key);
+    }
+  }, [segments, activeSegmentKey]);
+
   const activeSegment =
     segments.find((segment) => segment.key === activeSegmentKey) ?? segments[0] ?? null;
+  const chartSegment = activeSegment ?? overviewSegment;
   const points = useMemo(
-    () => (activeSegment ? buildPreviewPerformancePoints(activeSegment, range) : []),
-    [activeSegment, range],
+    () => buildPreviewPerformancePoints(chartSegment, range),
+    [chartSegment, range],
   );
   const lastPoint = points.at(-1) ?? null;
   const rangeChange = useMemo(() => getRangeChange(points), [points]);
@@ -493,16 +508,19 @@ export function AssetSummaryCard({
   }, [points.length, range]);
 
   useEffect(() => {
-    if (!activeSegment || !lastPoint) {
+    if (!lastPoint) {
       return;
     }
 
     const listenerId = countUpProgress.addListener(({ value }) => {
       setAnimatedMetrics({
-        totalAssets: lastPoint.value * value,
-        cumulativeReturn: lastPoint.gain * value,
-        cumulativeReturnRate: lastPoint.gainRate * value,
-        todayChange: activeSegment.todayChange * value,
+        totalAssets: overviewMetrics.totalAssets * value,
+        cumulativeReturn: overviewMetrics.cumulativeReturn * value,
+        cumulativeReturnRate:
+          overviewMetrics.costBase === 0
+            ? 0
+            : (overviewMetrics.cumulativeReturn / overviewMetrics.costBase) * value,
+        todayChange: overviewMetrics.todayChange * value,
         rangeChange: rangeChange.amount * value,
         rangeChangeRate: rangeChange.rate * value,
       });
@@ -531,7 +549,7 @@ export function AssetSummaryCard({
     return () => {
       countUpProgress.removeListener(listenerId);
     };
-  }, [activeSegment, countUpProgress, lastPoint, rangeChange, revealProgress]);
+  }, [chartSegment, countUpProgress, lastPoint, overviewMetrics, rangeChange, revealProgress]);
 
   const chartBounds = useMemo(() => {
     if (points.length === 0) {
@@ -687,25 +705,12 @@ export function AssetSummaryCard({
     setActiveSegmentKey(nextKey);
   };
 
-  if (!activeSegment) {
-    return null;
-  }
+  const chartAccentColor = chartSegment.accentColor;
 
-  const displayedValue = scrubbing && activePoint ? activePoint.value : animatedMetrics.totalAssets;
-  const displayedCumulative = scrubbing && activePoint ? activePoint.gain : animatedMetrics.cumulativeReturn;
-  const displayedCumulativeRate = scrubbing
-    ? (activePoint?.gainRate ?? 0)
-    : animatedMetrics.cumulativeReturnRate;
-  const visibleTotalAssets = hasSufficientHistory ? displayedValue : activeSegment.totalAssets;
-  const visibleCumulative = hasSufficientHistory
-    ? displayedCumulative
-    : activeSegment.cumulativeReturn;
-  const visibleCumulativeRate = hasSufficientHistory
-    ? displayedCumulativeRate
-    : activeSegment.cumulativeReturnRate;
-  const visibleTodayChange = hasSufficientHistory
-    ? animatedMetrics.todayChange
-    : activeSegment.todayChange;
+  const visibleTotalAssets = animatedMetrics.totalAssets;
+  const visibleCumulative = animatedMetrics.cumulativeReturn;
+  const visibleCumulativeRate = animatedMetrics.cumulativeReturnRate;
+  const visibleTodayChange = animatedMetrics.todayChange;
 
   return (
     <LinearGradient
@@ -719,28 +724,23 @@ export function AssetSummaryCard({
           {formatCurrency(visibleTotalAssets, currency, 0)}
         </Text>
 
-        <View style={styles.headerMetrics}>
-          <View style={[styles.headerMetric, styles.totalReturnMetric]}>
+        <Pressable onPress={() => setShowPercentages((prev) => !prev)} style={styles.headerMetrics}>
+          <View style={styles.headerMetric}>
             <Text style={styles.headerMetricLabel}>Total Return</Text>
-            <View style={styles.totalReturnRow}>
-              <Text
-                style={[
-                  styles.headerMetricValue,
-                  visibleCumulative >= 0 ? styles.positive : styles.negative,
-                ]}
-                numberOfLines={1}
-              >
-                {formatSignedCurrency(visibleCumulative, currency, 0)}
-              </Text>
-              <View style={styles.ratePill}>
-                <Text style={styles.ratePillText}>{formatPercent(visibleCumulativeRate)}</Text>
-              </View>
-            </View>
+            <Text
+              style={[
+                styles.headerMetricValue,
+                visibleCumulative >= 0 ? styles.positive : styles.negative,
+              ]}
+              numberOfLines={1}
+            >
+              {showPercentages
+                ? formatPercent(visibleCumulativeRate)
+                : formatSignedCurrency(visibleCumulative, currency, 0)}
+            </Text>
           </View>
 
-          <View style={styles.headerDivider} />
-
-          <View style={[styles.headerMetric, styles.todayMetric]}>
+          <View style={styles.headerMetric}>
             <Text style={styles.headerMetricLabel}>Today's Gain</Text>
             <Text
               style={[
@@ -749,11 +749,16 @@ export function AssetSummaryCard({
               ]}
               numberOfLines={1}
             >
-              {formatSignedCurrency(visibleTodayChange, currency, 0)}
+              {showPercentages
+                ? formatPercent(
+                    overviewMetrics.totalAssets === 0
+                      ? 0
+                      : visibleTodayChange / overviewMetrics.totalAssets,
+                  )
+                : formatSignedCurrency(visibleTodayChange, currency, 0)}
             </Text>
           </View>
-
-        </View>
+        </Pressable>
       </View>
 
       <ScrollView
@@ -810,8 +815,8 @@ export function AssetSummaryCard({
             <Svg width={chartWidth} height={chartHeight}>
               <Defs>
                 <SvgLinearGradient id="summaryAreaFill" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <Stop offset="0%" stopColor={activeSegment.accentColor} stopOpacity={0.42} />
-                  <Stop offset="100%" stopColor={activeSegment.accentColor} stopOpacity={0} />
+                  <Stop offset="0%" stopColor={chartAccentColor} stopOpacity={0.42} />
+                  <Stop offset="100%" stopColor={chartAccentColor} stopOpacity={0} />
                 </SvgLinearGradient>
               </Defs>
 
@@ -842,7 +847,7 @@ export function AssetSummaryCard({
               <Path d={areaPath} fill="url(#summaryAreaFill)" />
               <Path
                 d={linePath}
-                stroke={activeSegment.accentColor}
+                stroke={chartAccentColor}
                 strokeWidth={3}
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -886,13 +891,13 @@ export function AssetSummaryCard({
                     cx={activeCoordinates.x}
                     cy={activeCoordinates.y}
                     r={7}
-                    fill={`${activeSegment.accentColor}44`}
+                    fill={`${chartAccentColor}44`}
                   />
                   <Circle
                     cx={activeCoordinates.x}
                     cy={activeCoordinates.y}
                     r={4.5}
-                    fill={activeSegment.accentColor}
+                    fill={chartAccentColor}
                   />
                 </G>
               ) : null}
@@ -925,7 +930,7 @@ export function AssetSummaryCard({
               style={[
                 styles.rangeChip,
                 active ? styles.rangeChipActive : null,
-                active ? { borderColor: `${activeSegment.accentColor}88` } : null,
+                active ? { borderColor: `${chartAccentColor}88` } : null,
               ]}
             >
               <Text style={[styles.rangeChipText, active ? styles.rangeChipTextActive : null]}>
@@ -950,33 +955,27 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   value: {
     flex: 1,
     minWidth: 0,
     fontFamily: fontFamilies.bold,
-    fontSize: 29,
-    lineHeight: 36,
+    fontSize: 34,
+    lineHeight: 42,
     color: colors.white,
   },
   headerMetrics: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 5,
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 8,
   },
   headerMetric: {
-    gap: 3,
-  },
-  totalReturnMetric: {
-    minWidth: 106,
-    maxWidth: 116,
-  },
-  todayMetric: {
-    minWidth: 68,
-    maxWidth: 76,
+    alignItems: 'flex-end',
+    gap: 2,
   },
   headerMetricLabel: {
     fontFamily: fontFamilies.regular,
@@ -988,29 +987,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.semibold,
     fontSize: 14,
     lineHeight: 18,
-  },
-  totalReturnRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  ratePill: {
-    minHeight: 18,
-    paddingHorizontal: 5,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.10)',
-  },
-  ratePillText: {
-    fontFamily: fontFamilies.semibold,
-    fontSize: 9,
-    color: '#9BE4BF',
-  },
-  headerDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: 'rgba(255,255,255,0.16)',
   },
   segmentTabs: {
     gap: 8,
